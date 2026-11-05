@@ -1,0 +1,151 @@
+name: Corrida del Observatorio
+
+# Se lanza desde el aplicativo (botón "Lanzar corrida"), desde el servidor MCP
+# (herramienta lanzar_corrida, solo admins) o a mano en Actions → "Run workflow".
+# Escribe directamente en Postgres (secreto DATABASE_URL).
+#
+# Flujo: preparar (crea la ejecución y las consultas) → extraer (trabajos en
+# paralelo por fuente y fragmento) + cursos → consolidar (limpieza, duplicados,
+# clasificación, softwares, mini corrida si no se llega a la meta, reporte).
+# Si algo se interrumpe, vuelva a lanzar con el MISMO run_id: retoma sin duplicar.
+
+run-name: "Corrida ${{ inputs.semestre }} ${{ inputs.corte }} (${{ inputs.run_id || 'nueva' }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      semestre:
+        description: "Semestre (p. ej. 2026-II)"
+        required: true
+        type: string
+      corte:
+        description: "Corte"
+        required: true
+        type: choice
+        options: [inicio, mitad, final]
+      run_id:
+        description: "Id de ejecución (vacío = nuevo; repetir uno para reanudar)"
+        required: false
+        type: string
+        default: ""
+      modo:
+        description: "completa o prueba (prueba = pocos términos, 1 ciudad, 20 ofertas por consulta)"
+        required: false
+        type: choice
+        options: [completa, prueba]
+        default: completa
+      ejecutado_por:
+        description: "Quién la lanzó (lo llena el aplicativo)"
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: observatorio-corrida-${{ inputs.semestre }}-${{ inputs.corte }}
+  cancel-in-progress: false
+
+env:
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+  OPENROUTER_MODELS: ${{ vars.OPENROUTER_MODELS }}
+  PROXIES: ${{ secrets.PROXIES }}
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  preparar:
+    name: Preparar
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      run_id: ${{ steps.prep.outputs.run_id }}
+      matriz: ${{ steps.prep.outputs.matriz }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-scraper.txt
+      - run: pip install -r requirements-scraper.txt
+      - name: Migrar base de datos
+        run: python -m observatorio.run migrar
+      - name: Crear ejecución y consultas
+        id: prep
+        run: |
+          EXTRA=""
+          if [ "${{ inputs.modo }}" = "prueba" ]; then EXTRA="--prueba"; fi
+          python -m observatorio.run preparar --semestre "${{ inputs.semestre }}" --corte "${{ inputs.corte }}" \
+            --run-id "${{ inputs.run_id }}" --ejecutado-por "${{ inputs.ejecutado_por || github.actor }}" \
+            --github-output "$GITHUB_OUTPUT" $EXTRA
+
+  extraer:
+    name: Extraer ${{ matrix.fuente }} ${{ matrix.fragmento }}
+    needs: preparar
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix: ${{ fromJson(needs.preparar.outputs.matriz) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-scraper.txt
+      - run: pip install -r requirements-scraper.txt
+      - name: Extraer ofertas
+        run: |
+          python -m observatorio.run extraer --run-id "${{ needs.preparar.outputs.run_id }}" \
+            --fuente "${{ matrix.fuente }}" --fragmento ${{ matrix.fragmento }} --fragmentos ${{ matrix.fragmentos }} \
+            --max-minutos 320
+
+  cursos:
+    name: Cursos en tendencia
+    needs: preparar
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-scraper.txt
+      - run: pip install -r requirements-scraper.txt
+      - run: python -m observatorio.run cursos --run-id "${{ needs.preparar.outputs.run_id }}"
+
+  consolidar:
+    name: Consolidar y reporte
+    needs: [preparar, extraer, cursos]
+    if: ${{ always() && needs.preparar.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-scraper.txt
+      - run: pip install -r requirements-scraper.txt
+      - name: Procesar, deduplicar, clasificar y (si hace falta) mini corrida
+        run: python -m observatorio.run consolidar --run-id "${{ needs.preparar.outputs.run_id }}"
+      - name: Exportar Excel del corte
+        if: always()
+        run: python -m observatorio.run exportar --semestre "${{ inputs.semestre }}" --corte "${{ inputs.corte }}" --salida "observatorio_${{ inputs.semestre }}_${{ inputs.corte }}.xlsx"
+      - name: Reporte en el resumen de Actions
+        if: always()
+        run: |
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          python -m observatorio.run reporte --run-id "${{ needs.preparar.outputs.run_id }}" >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - name: Guardar Excel como artefacto
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: observatorio-${{ inputs.semestre }}-${{ inputs.corte }}
+          path: "*.xlsx"
+          retention-days: 30
