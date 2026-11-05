@@ -36,6 +36,9 @@ def _bool(valor: str | None) -> bool:
 
 def normalizar_url_bd(url: str) -> str:
     """Neon/Heroku entregan a veces `postgres://`; SQLAlchemy necesita `postgresql://`."""
+    # Una URL nunca lleva espacios; al pegarla en un formulario a veces se cuelan
+    # saltos de línea o espacios (p. ej. en el secreto de GitHub o Vercel).
+    url = "".join(url.split())
     if not url:
         return "sqlite:///./observatorio_local.db"
     # SQLAlchemy 2.1 usa psycopg (v3) por defecto para `postgresql://`;
