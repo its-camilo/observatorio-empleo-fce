@@ -1,0 +1,13 @@
+[project]
+name = "observatorio-empleo-fce"
+version = "1.0.0"
+description = "Observatorio de Empleo FCE: scraping de ofertas, detección de softwares, API, front y MCP (UIFCE, UNAL)"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+
+[tool.setuptools.packages.find]
+include = ["observatorio*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -1,0 +1,40 @@
+{
+  "_comentario": "Términos de búsqueda iniciales. 'principal' = corrida normal (incluye los del documento, sección 6). 'ampliado' = solo para la mini corrida automática cuando no se llega a la meta.",
+  "principal": {
+    "Contaduría Pública": [
+      "contador público", "auxiliar contable", "analista contable", "revisor fiscal", "auditor", "analista tributario", "practicante contable",
+      "contador", "asistente contable", "analista de impuestos", "auditor interno", "auditor externo", "analista de costos", "analista de nómina",
+      "auxiliar de nómina", "analista de tesorería", "auxiliar de tesorería", "analista de cuentas por pagar", "analista de cuentas por cobrar",
+      "coordinador contable", "jefe de contabilidad", "analista NIIF", "aprendiz contable", "practicante de contaduría", "auxiliar de facturación",
+      "analista de control interno", "contralor", "accountant", "staff accountant", "tax analyst", "audit associate"
+    ],
+    "Economía": [
+      "economista", "analista económico", "analista de datos", "analista de riesgo", "investigador económico", "practicante de economía",
+      "analista de riesgo de crédito", "analista de riesgo de mercado", "analista de inversiones", "analista financiero", "analista de planeación financiera",
+      "analista de precios", "analista de estudios económicos", "analista cuantitativo", "analista de inteligencia de negocios", "analista de políticas públicas",
+      "consultor económico", "asistente de investigación", "analista de mercados", "analista de pricing", "analista de crédito", "analista estadístico",
+      "practicante de finanzas", "practicante analista de datos", "data analyst", "business intelligence analyst", "financial analyst", "risk analyst", "economist"
+    ],
+    "Administración de Empresas": [
+      "administrador de empresas", "analista administrativo", "analista de proyectos", "analista de procesos", "coordinador comercial", "practicante de administración",
+      "asistente administrativo", "auxiliar administrativo", "coordinador administrativo", "analista de compras", "analista de talento humano", "analista de recursos humanos",
+      "analista de mercadeo", "coordinador de operaciones", "analista de operaciones", "gerente de proyectos", "project manager", "analista de calidad",
+      "ejecutivo comercial", "analista de logística", "jefe administrativo", "asistente de gerencia", "practicante administrativo", "aprendiz administrativo",
+      "analista de planeación", "business analyst", "analista de servicio al cliente", "coordinador de talento humano", "practicante de mercadeo", "management trainee"
+    ]
+  },
+  "ampliado": {
+    "Contaduría Pública": [
+      "contabilidad", "impuestos", "tesorería", "nómina", "facturación electrónica", "conciliaciones bancarias", "cartera", "costos", "presupuesto",
+      "revisoría fiscal", "auditoría", "NIIF", "cierre contable", "exógena", "auxiliar de cartera", "analista de cartera", "auxiliar de costos", "outsourcing contable"
+    ],
+    "Economía": [
+      "economía", "finanzas", "riesgos", "inversiones", "banca", "mercado de capitales", "econometría", "estadística", "analítica de datos", "modelos financieros",
+      "planeación financiera", "FP&A", "tesorería corporativa", "seguros", "actuarial", "banca de inversión", "investigación de mercados", "consultoría"
+    ],
+    "Administración de Empresas": [
+      "administración", "gestión administrativa", "operaciones", "compras", "logística", "recursos humanos", "talento humano", "mercadeo", "ventas", "servicio al cliente",
+      "gestión de proyectos", "procesos", "calidad", "planeación estratégica", "emprendimiento", "comercio exterior", "abastecimiento", "gestión documental", "asistente ejecutivo"
+    ]
+  }
+}

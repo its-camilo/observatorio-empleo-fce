@@ -1,0 +1,542 @@
+{
+ "_comentario": "Catálogo inicial (sección 7 del documento). Cada sinónimo es texto simple, o un objeto con reglas: cs = sensible a mayúsculas, ctx = exige palabras de contexto cerca, excluir = expresión regular que anula la coincidencia. GC lo edita después desde el aplicativo.",
+ "grupos": [
+  {
+   "grupo": "Suite de Office",
+   "softwares": [
+    {
+     "software": "Excel",
+     "sinonimos": [
+      "ms excel",
+      "microsoft excel",
+      {
+       "t": "excel",
+       "excluir": "(?i)\\bexcel(?:s|led|ling)?\\s+(?:in|at)\\b"
+      }
+     ]
+    },
+    {
+     "software": "Excel avanzado",
+     "sinonimos": [
+      "excel avanzado",
+      "excel intermedio",
+      "excel intermedio-avanzado",
+      "advanced excel",
+      "tablas dinámicas",
+      "tablas dinamicas",
+      "pivot tables",
+      "buscarv",
+      "vlookup",
+      "xlookup",
+      "buscarx"
+     ]
+    },
+    {
+     "software": "Excel financiero",
+     "sinonimos": [
+      "excel financiero",
+      "modelación financiera en excel",
+      "modelos financieros en excel",
+      "financial modeling in excel"
+     ]
+    },
+    {
+     "software": "Macros / VBA",
+     "sinonimos": [
+      "vba",
+      "macros",
+      "macros en excel",
+      "visual basic for applications",
+      "excel vba"
+     ]
+    },
+    {
+     "software": "Word",
+     "contexto": "office, ofimática, ofimatica, excel, powerpoint, power point, microsoft, paquete, herramientas, manejo, informes, documentos, outlook",
+     "sinonimos": [
+      "ms word",
+      "microsoft word",
+      {
+       "t": "Word",
+       "cs": true,
+       "ctx": true
+      }
+     ]
+    },
+    {
+     "software": "PowerPoint",
+     "sinonimos": [
+      "powerpoint",
+      "power point",
+      "ms powerpoint",
+      "microsoft powerpoint"
+     ]
+    },
+    {
+     "software": "Access",
+     "contexto": "office, ofimática, ofimatica, excel, word, base de datos, bases de datos, microsoft, sql, consultas, powerpoint",
+     "sinonimos": [
+      "ms access",
+      "microsoft access",
+      {
+       "t": "Access",
+       "cs": true,
+       "ctx": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "grupo": "Visualizadores, gestores de datos y softwares estadísticos",
+   "softwares": [
+    {
+     "software": "Power BI",
+     "sinonimos": [
+      "power bi",
+      "powerbi",
+      "microsoft power bi",
+      "power-bi",
+      {
+       "t": "PBI",
+       "cs": true
+      }
+     ]
+    },
+    {
+     "software": "Tableau",
+     "sinonimos": [
+      "tableau"
+     ]
+    },
+    {
+     "software": "Looker Studio",
+     "sinonimos": [
+      "looker studio",
+      "google data studio",
+      "data studio",
+      "looker"
+     ]
+    },
+    {
+     "software": "Power Query",
+     "sinonimos": [
+      "power query",
+      "powerquery"
+     ]
+    },
+    {
+     "software": "Power Pivot",
+     "sinonimos": [
+      "power pivot",
+      "powerpivot"
+     ]
+    },
+    {
+     "software": "STATA",
+     "sinonimos": [
+      "stata"
+     ]
+    },
+    {
+     "software": "SAS",
+     "contexto": "estadística, estadistica, estadístico, spss, stata, python, sql, analítica, analitica, programación, programacion, econometr, minería de datos, mineria de datos, enterprise guide, base sas, matlab, rstudio, análisis de datos, analisis de datos, power bi, data science",
+     "sinonimos": [
+      "sas enterprise guide",
+      "sas base",
+      "sas miner",
+      "sas viya",
+      "sas eg",
+      {
+       "t": "SAS",
+       "cs": true,
+       "ctx": true,
+       "excluir": "S\\.\\s?A\\.\\s?S|\\bSAS\\s*[.,]?\\s*(?:E\\.?S\\.?P|BIC)\\b|[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\\.?\\s+SAS\\b|\\b(?:S\\.A\\.|LTDA|Ltda)"
+      }
+     ]
+    },
+    {
+     "software": "SPSS",
+     "sinonimos": [
+      "spss",
+      "ibm spss"
+     ]
+    },
+    {
+     "software": "MATLAB",
+     "sinonimos": [
+      "matlab"
+     ]
+    },
+    {
+     "software": "NVivo",
+     "sinonimos": [
+      "nvivo"
+     ]
+    },
+    {
+     "software": "ATLAS.ti",
+     "sinonimos": [
+      "atlas.ti",
+      "atlas ti",
+      "atlasti"
+     ]
+    }
+   ]
+  },
+  {
+   "grupo": "Lenguajes de programación / desarrollo",
+   "softwares": [
+    {
+     "software": "Python",
+     "sinonimos": [
+      "python",
+      "pandas",
+      "jupyter"
+     ]
+    },
+    {
+     "software": "R",
+     "contexto": "python, sql, stata, spss, sas, matlab, programación, programacion, lenguaje, lenguajes, estadística, estadistica, estadístico, econometr, rstudio, shiny, tidyverse, ggplot, análisis de datos, analisis de datos, power bi, data science, machine learning",
+     "sinonimos": [
+      "rstudio",
+      "r studio",
+      "lenguaje r",
+      "programación en r",
+      "programacion en r",
+      "r programming",
+      "tidyverse",
+      "ggplot2",
+      "r shiny",
+      {
+       "t": "R",
+       "cs": true,
+       "ctx": true,
+       "excluir": "R\\s?[&+]\\s?D|R\\.\\s?H|\\bR\\$|\\bRRHH\\b|\\bR\\s?-\\s?\\d|\\(R\\)|®"
+      }
+     ]
+    },
+    {
+     "software": "SQL",
+     "sinonimos": [
+      "sql",
+      "t-sql",
+      "pl/sql",
+      "plsql",
+      "sql server",
+      "postgresql",
+      "consultas sql"
+     ]
+    },
+    {
+     "software": "MySQL",
+     "sinonimos": [
+      "mysql"
+     ]
+    },
+    {
+     "software": "Java",
+     "sinonimos": [
+      "java"
+     ]
+    },
+    {
+     "software": "JavaScript",
+     "sinonimos": [
+      "javascript",
+      "java script",
+      "node.js",
+      "nodejs",
+      "typescript"
+     ]
+    },
+    {
+     "software": "Google Apps Script",
+     "sinonimos": [
+      "google apps script",
+      "apps script",
+      "appscript"
+     ]
+    },
+    {
+     "software": "LaTeX",
+     "contexto": "documentos, overleaf, académic, academic, investigación, investigacion, tex, artículos, articulos, publicaciones, beamer",
+     "sinonimos": [
+      "overleaf",
+      {
+       "t": "LaTeX",
+       "cs": true
+      },
+      {
+       "t": "latex",
+       "ctx": true
+      }
+     ]
+    },
+    {
+     "software": "Go",
+     "activo": false,
+     "contexto": "programación, programacion, lenguaje, lenguajes, backend, python, java, microservicios, developer, desarrollador, kubernetes, docker",
+     "sinonimos": [
+      "golang",
+      {
+       "t": "Go",
+       "cs": true,
+       "ctx": true,
+       "excluir": "\\bGo[\\s-]+to\\b|\\bGo[\\s-]+live\\b|\\bLet'?s\\s+go\\b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "grupo": "Sistemas contables / ERP",
+   "softwares": [
+    {
+     "software": "SAP",
+     "sinonimos": [
+      "sap",
+      "sap fico",
+      "sap fi",
+      "sap co",
+      "sap s/4hana",
+      "s/4hana",
+      "s4hana",
+      "sap hana",
+      "sap business one",
+      "sap b1",
+      "sap erp",
+      "sap mm",
+      "sap sd"
+     ]
+    },
+    {
+     "software": "Siigo Nube",
+     "sinonimos": [
+      "siigo",
+      "siigo nube",
+      "siigo pyme"
+     ]
+    },
+    {
+     "software": "World Office",
+     "sinonimos": [
+      "world office",
+      "worldoffice"
+     ]
+    },
+    {
+     "software": "Alegra",
+     "contexto": "contable, contabilidad, software, siigo, erp, facturación, facturacion, world office, helisa, programas, sistema",
+     "sinonimos": [
+      {
+       "t": "Alegra",
+       "cs": true,
+       "ctx": true
+      },
+      "alegra.com",
+      "software alegra"
+     ]
+    },
+    {
+     "software": "Odoo",
+     "sinonimos": [
+      "odoo"
+     ]
+    },
+    {
+     "software": "QuickBooks",
+     "sinonimos": [
+      "quickbooks",
+      "quick books"
+     ]
+    }
+   ]
+  },
+  {
+   "grupo": "Modelado de procesos y gestión de proyectos",
+   "softwares": [
+    {
+     "software": "Bizagi",
+     "sinonimos": [
+      "bizagi"
+     ]
+    },
+    {
+     "software": "Arena",
+     "contexto": "simulación, simulacion, flexsim, procesos, modelado, modelos, rockwell, promodel, software",
+     "sinonimos": [
+      "arena simulation",
+      "rockwell arena",
+      {
+       "t": "Arena",
+       "cs": true,
+       "ctx": true
+      }
+     ]
+    },
+    {
+     "software": "FlexSim",
+     "sinonimos": [
+      "flexsim",
+      "flex sim"
+     ]
+    },
+    {
+     "software": "MS Project",
+     "sinonimos": [
+      "ms project",
+      "microsoft project",
+      "ms-project",
+      "project online"
+     ]
+    }
+   ]
+  },
+  {
+   "grupo": "Diseño gráfico y edición de imágenes",
+   "softwares": [
+    {
+     "software": "Photoshop",
+     "sinonimos": [
+      "photoshop",
+      "adobe photoshop"
+     ]
+    },
+    {
+     "software": "Illustrator",
+     "sinonimos": [
+      "illustrator",
+      "adobe illustrator"
+     ]
+    },
+    {
+     "software": "InDesign",
+     "sinonimos": [
+      "indesign",
+      "adobe indesign"
+     ]
+    },
+    {
+     "software": "Inkscape",
+     "sinonimos": [
+      "inkscape"
+     ]
+    },
+    {
+     "software": "Canva",
+     "sinonimos": [
+      "canva"
+     ]
+    }
+   ]
+  },
+  {
+   "grupo": "Creación de contenidos digitales / educación",
+   "softwares": [
+    {
+     "software": "Articulate",
+     "contexto": "storyline, rise, e-learning, elearning, contenido, contenidos, cursos, scorm, virtual",
+     "sinonimos": [
+      "articulate storyline",
+      "articulate 360",
+      "articulate rise",
+      {
+       "t": "Articulate",
+       "cs": true,
+       "ctx": true
+      }
+     ]
+    },
+    {
+     "software": "H5P",
+     "sinonimos": [
+      "h5p"
+     ]
+    },
+    {
+     "software": "Moodle",
+     "sinonimos": [
+      "moodle"
+     ]
+    },
+    {
+     "software": "Genially",
+     "sinonimos": [
+      "genially",
+      "genial.ly"
+     ]
+    },
+    {
+     "software": "OpenShot",
+     "sinonimos": [
+      "openshot"
+     ]
+    },
+    {
+     "software": "Shotcut",
+     "sinonimos": [
+      "shotcut"
+     ]
+    }
+   ]
+  },
+  {
+   "grupo": "Inteligencia artificial y automatización",
+   "softwares": [
+    {
+     "software": "ChatGPT / IA generativa",
+     "sinonimos": [
+      "chatgpt",
+      "chat gpt",
+      "openai",
+      "ia generativa",
+      "inteligencia artificial generativa",
+      "generative ai",
+      "genai",
+      "gen ai",
+      "prompt engineering",
+      "ingeniería de prompts",
+      "ingenieria de prompts",
+      "llm",
+      "llms"
+     ]
+    },
+    {
+     "software": "Copilot",
+     "sinonimos": [
+      "copilot",
+      "microsoft copilot",
+      "github copilot"
+     ]
+    },
+    {
+     "software": "Power Automate",
+     "sinonimos": [
+      "power automate",
+      "microsoft flow"
+     ]
+    },
+    {
+     "software": "Zapier",
+     "sinonimos": [
+      "zapier"
+     ]
+    },
+    {
+     "software": "Power Apps",
+     "sinonimos": [
+      "power apps",
+      "powerapps"
+     ]
+    },
+    {
+     "software": "n8n",
+     "sinonimos": [
+      "n8n"
+     ]
+    }
+   ]
+  }
+ ]
+}
