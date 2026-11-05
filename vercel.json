@@ -1,0 +1,18 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd web && npm ci",
+  "buildCommand": "cd web && npm run build",
+  "outputDirectory": "web/dist",
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60,
+      "includeFiles": "observatorio/**"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/mcp", "destination": "/api/index" },
+    { "source": "/mcp/(.*)", "destination": "/api/index" },
+    { "source": "/((?!api/|mcp|assets/).*)", "destination": "/index.html" }
+  ]
+}

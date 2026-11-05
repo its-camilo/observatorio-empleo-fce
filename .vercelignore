@@ -1,0 +1,7 @@
+tests/
+docs/
+powerbi/
+alembic/
+web/node_modules/
+*.db
+.github/

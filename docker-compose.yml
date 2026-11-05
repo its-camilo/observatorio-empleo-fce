@@ -1,0 +1,31 @@
+# Servidor propio: Postgres + aplicativo (API, front y MCP en el puerto 8000).
+# Uso: cp .env.example .env  (complete JWT_SECRET, GITHUB_TOKEN, etc.) && docker compose up -d --build
+# Las corridas se lanzan en GitHub Actions desde el aplicativo. Si la IP del servidor no está bloqueada,
+# también puede correr una corrida aquí:  docker compose run --rm app python -m observatorio.run --semestre 2026-II --corte inicio
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: observatorio
+      POSTGRES_USER: observatorio
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cambie-esta-clave}
+    volumes:
+      - datos_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U observatorio"]
+      interval: 5s
+      retries: 10
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://observatorio:${POSTGRES_PASSWORD:-cambie-esta-clave}@db:5432/observatorio
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+volumes:
+  datos_pg:
