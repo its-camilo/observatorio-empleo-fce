@@ -38,8 +38,11 @@ def normalizar_url_bd(url: str) -> str:
     """Neon/Heroku entregan a veces `postgres://`; SQLAlchemy necesita `postgresql://`."""
     if not url:
         return "sqlite:///./observatorio_local.db"
-    if url.startswith("postgres://"):
-        url = "postgresql://" + url[len("postgres://"):]
+    # SQLAlchemy 2.1 usa psycopg (v3) por defecto para `postgresql://`;
+    # el proyecto instala psycopg2-binary, así que se fija el driver.
+    for prefijo in ("postgres://", "postgresql://"):
+        if url.startswith(prefijo):
+            url = "postgresql+psycopg2://" + url[len(prefijo):]
     return url
 
 
