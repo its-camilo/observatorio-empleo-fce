@@ -4,6 +4,18 @@ version = "1.0.0"
 description = "Observatorio de Empleo FCE: scraping de ofertas, detección de softwares, API, front y MCP (UIFCE, UNAL)"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+dependencies = [
+    "fastapi>=0.115,<1",
+    "sqlalchemy>=2.0,<3",
+    "psycopg2-binary>=2.9",
+    "pyjwt>=2.8",
+    "google-auth>=2.30",
+    "requests>=2.31",
+    "openpyxl>=3.1",
+    "python-dotenv>=1.0",
+    "pydantic>=2.6",
+    "mcp>=2.3,<3",
+]
 
 [tool.setuptools.packages.find]
 include = ["observatorio*"]
