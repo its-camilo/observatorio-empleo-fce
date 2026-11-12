@@ -1,0 +1,51 @@
+name: Mantenimiento de base de datos
+
+# Aplica migraciones, actualiza semilla y (opcional) purga ofertas operativas en Neon/Postgres.
+# No se ejecuta en deploy; use workflow_dispatch desde Actions cuando Camilo quiera actualizar producción.
+
+on:
+  workflow_dispatch:
+    inputs:
+      aplicar:
+        description: "Purga operativa: false = solo vista previa; true = ejecuta --aplicar"
+        required: true
+        type: boolean
+        default: false
+
+concurrency:
+  group: observatorio-mantenimiento
+  cancel-in-progress: false
+
+env:
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  mantenimiento:
+    name: Migrar, semilla y purga
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-scraper.txt
+      - run: pip install -r requirements-scraper.txt
+      - name: Migraciones Alembic
+        run: |
+          echo "=== Alembic upgrade head ==="
+          python -m observatorio.run migrar
+      - name: Semilla (config, términos, admin)
+        run: |
+          echo "=== Semilla ==="
+          python -m observatorio.run semilla
+      - name: Purga operativa (vista previa o aplicar)
+        run: |
+          echo "=== Purga operativa (aplicar=${{ inputs.aplicar }}) ==="
+          if [ "${{ inputs.aplicar }}" = "true" ]; then
+            python -m observatorio.run purga-operativa --aplicar
+          else
+            python -m observatorio.run purga-operativa
+          fi

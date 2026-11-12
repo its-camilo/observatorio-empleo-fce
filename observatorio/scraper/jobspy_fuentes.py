@@ -14,6 +14,7 @@ from observatorio.config import ajustes
 from observatorio.scraper.base import Consulta, OfertaCrudaDatos
 
 log = logging.getLogger("observatorio.jobspy")
+_JOBSPY_GOOGLE = logging.getLogger("jobspy.google")
 
 
 def _valor(r, col):
@@ -30,6 +31,15 @@ def _valor(r, col):
     return v
 
 
+def _dataframe_vacio(df) -> bool:
+    if df is None:
+        return True
+    try:
+        return len(df) == 0
+    except TypeError:
+        return True
+
+
 class _JobSpyBase:
     sitio = ""
     nombre = ""
@@ -42,13 +52,36 @@ class _JobSpyBase:
     def _kwargs(self, c: Consulta) -> dict:
         return {}
 
-    def extraer(self, c: Consulta, ya_existe: Callable[[str], bool]) -> Iterator[OfertaCrudaDatos]:
+    def _scrape(self, c: Consulta, hours_old: int | None) -> "object":
         from jobspy import scrape_jobs
 
+        return scrape_jobs(
+            site_name=self.sitio,
+            search_term=c.termino,
+            results_wanted=c.max_resultados,
+            hours_old=hours_old,
+            proxies=self.proxies or None,
+            verbose=0,
+            description_format="markdown",
+            **self._kwargs(c),
+        )
+
+    def extraer(self, c: Consulta, ya_existe: Callable[[str], bool]) -> Iterator[OfertaCrudaDatos]:
         time.sleep(random.uniform(*self.retraso))
-        df = scrape_jobs(site_name=self.sitio, search_term=c.termino, results_wanted=c.max_resultados,
-                         hours_old=24 * c.ventana_dias, proxies=self.proxies or None, verbose=0,
-                         description_format="markdown", **self._kwargs(c))
+        nivel_log = _JOBSPY_GOOGLE.level
+        if self.sitio == "google":
+            _JOBSPY_GOOGLE.setLevel(logging.CRITICAL)
+        try:
+            horas = 24 * c.ventana_dias
+            df = self._scrape(c, horas)
+            if _dataframe_vacio(df) and self.sitio == "google":
+                df = self._scrape(c, None)
+        finally:
+            if self.sitio == "google":
+                _JOBSPY_GOOGLE.setLevel(nivel_log)
+        if _dataframe_vacio(df):
+            c.opciones.setdefault("stats", {})["sin_resultados"] = True
+            return
         stats = c.opciones.setdefault("stats", {"omitidas": 0, "sin_detalle": 0})
         for _, r in df.iterrows():
             idf = str(_valor(r, "id")).split("-", 1)[-1]
@@ -80,8 +113,12 @@ class GoogleJobs(_JobSpyBase):
     nombre = "Google Jobs"
 
     def _kwargs(self, c: Consulta) -> dict:
-        lugar = c.ubicacion or "Colombia"
-        texto = f"{c.termino} empleos en {lugar} últimos {c.ventana_dias} días"
+        """Deja que JobSpy arme la consulta (término + ubicación); no usar google_search_term en español."""
+        lugar = (c.nombre_ubicacion or c.ubicacion or "Colombia").strip()
+        if "|" in lugar:
+            lugar = lugar.split("|", 1)[0]
         if c.remoto:
-            texto = f"{c.termino} empleos remotos Colombia"
-        return {"google_search_term": texto, "location": lugar}
+            return {"location": "Colombia", "is_remote": True}
+        if "," not in lugar:
+            lugar = f"{lugar}, Colombia"
+        return {"location": lugar}

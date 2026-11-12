@@ -42,7 +42,13 @@ POR_DEFECTO: dict[str, dict[str, Any]] = {
     },
     "ventana_dias": {"valor": 30, "descripcion": "Solo ofertas publicadas en los últimos N días."},
     "tipo_oferta": {"valor": "ambas", "descripcion": "practica, empleo o ambas."},
-    "meta_ofertas": {"valor": 10000, "descripcion": "Meta de ofertas únicas relevantes por corte."},
+    "objetivo_ofertas_corrida": {
+        "valor": 10000,
+        "descripcion": "Número de ofertas crudas a recolectar en cada corrida. El orquestador reparte este cupo entre "
+                       "fuentes (más en LinkedIn, consultando LinkedIn primero) y detiene la extracción al alcanzarlo. "
+                       "También define la meta de relevantes guardadas para la mini corrida. "
+                       "max_por_particion en «fuentes» sigue siendo el tope por consulta (término × ciudad).",
+    },
     "mini_corrida": {
         "valor": {"habilitada": True, "max_minutos": 240, "fuentes": ["linkedin", "indeed", "computrabajo"]},
         "descripcion": "Si no se llega a la meta, se hace una mini corrida con los términos 'ampliado'.",
@@ -145,4 +151,12 @@ def leer_config(s: Session) -> dict[str, Any]:
                     base[k] = v
         else:
             cfg[fila.clave] = fila.valor
+    # Migración suave: claves antiguas → objetivo_ofertas_corrida
+    if cfg.get("objetivo_ofertas_corrida") is None:
+        lim = cfg.get("limite_extraccion_corrida")
+        meta = cfg.get("meta_ofertas")
+        if lim is not None and int(lim or 0) > 0:
+            cfg["objetivo_ofertas_corrida"] = int(lim)
+        elif meta is not None:
+            cfg["objetivo_ofertas_corrida"] = int(meta or 10000)
     return cfg
