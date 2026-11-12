@@ -10,7 +10,7 @@ export default function LogoUnal({ className = "" }: Props) {
       <img
         src="/logo-unal-blanco.png"
         alt="Universidad Nacional de Colombia"
-        className={`h-8 w-auto max-w-[min(220px,55vw)] object-contain object-left md:h-11 md:max-w-[280px] ${className}`}
+        className={`h-16 w-auto max-w-[min(440px,72vw)] object-contain object-left md:h-[5.5rem] md:max-w-[560px] ${className}`}
         width={600}
         height={255}
         decoding="async"
