@@ -90,7 +90,13 @@ export function EstadoChip({ estado }: { estado: string }) {
     en_curso: "bg-institucional/20 text-marina border-institucional",
     en_cola: "bg-niebla/40 text-texto-suave border-niebla",
   };
-  const t: Record<string, string> = { en_curso: "en curso", en_cola: "en cola" };
+  const t: Record<string, string> = {
+    en_curso: "en curso",
+    en_cola: "en cola",
+    fallida: "fallida · con errores",
+    incompleta: "incompleta · con errores",
+    completada: "completada",
+  };
   return (
     <span className={`rounded-boton border px-2.5 py-0.5 text-xs font-bold uppercase ${c[estado] || "bg-niebla/40"}`}>
       {t[estado] || estado}

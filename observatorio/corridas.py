@@ -9,10 +9,29 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from observatorio.config import ajustes
+from observatorio.corridas_cierre import (
+    cerrar_corridas_colgadas,
+    cerrar_ejecucion_error,
+    estado_github,
+    reconciliar_corridas_activas,
+    reconciliar_ejecucion,
+)
 from observatorio.db.modelos import Ejecucion, OfertaCruda, Particion, ahora
 from observatorio.normas_corrida import NOMBRES_FUENTE, normalizar_corte, normalizar_semestre
 
 API = "https://api.github.com"
+
+__all__ = [
+    "ErrorCorrida",
+    "cerrar_corridas_colgadas",
+    "cerrar_ejecucion_error",
+    "ejecucion_dict",
+    "estado_github",
+    "lanzar",
+    "progreso",
+    "reconciliar_corridas_activas",
+    "reconciliar_ejecucion",
+]
 
 
 class ErrorCorrida(Exception):
@@ -32,6 +51,8 @@ def lanzar(s: Session, semestre: str, corte: str, solicitado_por: str, modo: str
     semestre, corte = normalizar_semestre(semestre), normalizar_corte(corte)
     if modo not in ("completa", "prueba"):
         raise ErrorCorrida("El modo debe ser 'completa' o 'prueba'.")
+    reconciliar_corridas_activas(s, consultar_github=True)
+    s.commit()
     activa = s.scalars(select(Ejecucion).where(Ejecucion.estado.in_(["en_cola", "en_curso"]),
                                               Ejecucion.creado_en > ahora() - timedelta(hours=8))).first()
     if activa is not None:
@@ -60,27 +81,11 @@ def lanzar(s: Session, semestre: str, corte: str, solicitado_por: str, modo: str
     return ejec
 
 
-def estado_github(id_ejecucion: str) -> dict | None:
-    """Busca la ejecución de Actions cuyo título incluye el id (run-name del workflow)."""
-    a = ajustes()
-    if not a.github_token or not a.github_repo:
-        return None
-    try:
-        r = requests.get(f"{API}/repos/{a.github_repo}/actions/workflows/{a.github_workflow}/runs", headers=_cabeceras(),
-                         params={"per_page": 30, "event": "workflow_dispatch"}, timeout=15)
-        if r.status_code != 200:
-            return None
-        for run in r.json().get("workflow_runs", []):
-            if id_ejecucion in (run.get("display_title") or run.get("name") or ""):
-                return {"estado": run.get("status"), "conclusion": run.get("conclusion"), "url": run.get("html_url"),
-                        "iniciado": run.get("run_started_at")}
-    except requests.RequestException:
-        return None
-    return None
-
-
 def progreso(s: Session, ejec: Ejecucion, consultar_github: bool = False) -> dict:
     """Progreso a partir de las particiones (igual para GitHub Actions y para la CLI local)."""
+    if consultar_github and ejec.estado in ("en_cola", "en_curso"):
+        if reconciliar_ejecucion(s, ejec, consultar_github=True, persistir=True):
+            s.commit()
     filas = s.execute(select(Particion.fuente, Particion.estado, func.count(), func.sum(Particion.ofertas))
                       .where(Particion.id_ejecucion == ejec.id_ejecucion).group_by(Particion.fuente, Particion.estado)).all()
     por_fuente: dict[str, dict] = {}
@@ -106,12 +111,14 @@ def progreso(s: Session, ejec: Ejecucion, consultar_github: bool = False) -> dic
               "consultas": tot, "por_fuente": por_fuente, "ofertas_crudas": crudas, "procesadas": procesadas,
               "github_run_url": ejec.github_run_url}
     if consultar_github and ejec.ejecutor == "github" and ejec.estado in ("en_cola", "en_curso"):
-        gh = estado_github(ejec.id_ejecucion)
+        gh = estado_github(ejec.id_ejecucion, ejec.github_run_url)
         if gh:
             salida["github"] = gh
             salida["github_run_url"] = salida["github_run_url"] or gh.get("url")
-            if gh.get("estado") == "completed" and gh.get("conclusion") not in ("success", None) and ejec.estado == "en_cola":
-                salida["aviso"] = "El workflow de GitHub terminó con error antes de empezar. Revise el enlace de GitHub Actions."
+            if gh.get("estado") == "completed" and gh.get("conclusion") not in ("success", None):
+                salida["aviso"] = "El workflow de GitHub ya terminó con errores; si el estado no se actualiza, recargue en unos segundos."
+    elif ejec.estado in ("fallida", "incompleta") and ejec.fase == "terminada":
+        salida["aviso"] = "La corrida terminó con errores. Puede lanzar una nueva corrida."
     return salida
 
 

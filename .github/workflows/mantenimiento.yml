@@ -49,3 +49,9 @@ jobs:
           else
             python -m observatorio.run purga-reglas
           fi
+      - name: Cerrar corridas colgadas en curso/cola
+        env:
+          GITHUB_REPO: ${{ github.repository }}
+        run: |
+          echo "=== Reconciliar corridas en_curso / en_cola ==="
+          python -m observatorio.run cerrar-colgadas
