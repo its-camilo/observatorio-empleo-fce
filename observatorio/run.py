@@ -29,6 +29,9 @@ ACCIONES = (
     "migrar", "semilla", "purga-operativa",
 )
 
+# Comandos de mantenimiento / export que no requieren id de ejecución de corrida.
+ACCIONES_SIN_RUN_ID = frozenset({"exportar", "purga-operativa"})
+
 
 def configurar_logs() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S", stream=sys.stdout)
@@ -149,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
                     f.write(f"run_id={e.id_ejecucion}\n")
                     f.write(f"matriz={json.dumps({'include': m})}\n")
             return 0
-        if not a.run_id and a.accion != "exportar":
+        if not a.run_id and a.accion not in ACCIONES_SIN_RUN_ID:
             p.error("Indique --run-id")
         if a.accion == "extraer-secuencial":
             resumenes = orq.extraer_secuencial(s, a.run_id, a.max_minutos)
