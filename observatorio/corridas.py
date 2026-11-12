@@ -123,4 +123,8 @@ def ejecucion_dict(e: Ejecucion) -> dict:
     d = {c: getattr(e, c) for c in campos}
     for c in ("fecha", "inicio", "fin", "creado_en"):
         d[c] = d[c].isoformat() if d[c] else None
+    params = e.parametros or {}
+    d["presupuesto_fuentes"] = params.get("presupuesto_fuentes")
+    d["presupuesto_carreras"] = params.get("presupuesto_carreras")
+    d["logro_extraccion"] = params.get("logro_extraccion")
     return d

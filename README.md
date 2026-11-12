@@ -4,7 +4,7 @@ Aplicativo de la **Unidad de Informática de la Facultad de Ciencias Económicas
 para el Observatorio Tecnológico del área de Gestión del Conocimiento (GC).
 
 Recoge ofertas de empleo y práctica para **Administración de Empresas, Contaduría Pública y Economía** (LinkedIn, Indeed,
-Google Jobs y Computrabajo), detecta los **softwares** que piden con un catálogo editable, clasifica por carrera, elimina
+Indeed y Computrabajo), detecta los **softwares** que piden con un catálogo editable, clasifica por carrera, elimina
 duplicados y deja una base limpia lista para **Power BI**, con rankings por carrera y comparación entre cortes y semestres.
 
 - **Front + API** (React + FastAPI) en Vercel o en un servidor propio (Docker).
@@ -22,7 +22,7 @@ duplicados y deja una base limpia lista para **Power BI**, con rankings por carr
 
 ```
 observatorio/            Paquete Python
-  scraper/               Una parte por fuente: linkedin.py, jobspy_fuentes.py (Indeed, Google), computrabajo.py, cursos.py, http.py
+  scraper/               Una parte por fuente: linkedin.py, jobspy_fuentes.py (Indeed), computrabajo.py, cursos.py, http.py
   pipeline/              limpieza.py, dedup.py, software.py, clasificacion.py, llm.py, habilidades.py, no_catalogados.py, procesar.py
   db/                    modelos.py (tablas), sesion.py, semilla.py
   datos/                 catalogo.json y terminos.json (carga inicial; luego se editan en el aplicativo)

@@ -16,6 +16,9 @@ export type Ejecucion = {
   mini_corrida: boolean; conteo_por_fuente: Record<string, { encontradas: number; guardadas: number; consultas: number; consultas_con_error: number }> | null;
   conteo_por_carrera: Record<string, number> | null; errores_detalle: string[] | null; terminos_usados: string[] | null;
   uso_llm: Record<string, unknown> | null; duracion_segundos: number; fase: string; github_run_url: string | null;
+  presupuesto_fuentes?: Record<string, number> | null;
+  presupuesto_carreras?: Record<string, number> | null;
+  logro_extraccion?: { objetivo?: number; por_fuente?: Record<string, number>; por_carrera?: Record<string, number> } | null;
   progreso?: Progreso;
 };
 
@@ -71,6 +74,32 @@ export function Reporte({ e }: { e: Ejecucion }) {
         <div><dt className="text-texto-suave">Duración</dt><dd>{duracion(e.duracion_segundos || 0)}</dd></div>
         <div><dt className="text-texto-suave">Modo</dt><dd>{e.modo}</dd></div>
       </dl>
+      {e.presupuesto_fuentes && e.logro_extraccion && (
+        <div className="mt-3 text-sm">
+          <h3 className="font-semibold">Extracción (crudas): objetivo vs logrado</h3>
+          {e.logro_extraccion.objetivo != null && <p className="text-texto-suave">Objetivo global: {e.logro_extraccion.objetivo}</p>}
+          <ul className="mt-1 list-disc pl-5">
+            {Object.entries(e.presupuesto_fuentes).map(([f, meta]) => {
+              const etiqueta = { linkedin: "LinkedIn", indeed: "Indeed", computrabajo: "Computrabajo" }[f] || f;
+              const hecho = e.logro_extraccion?.por_fuente?.[etiqueta] ?? e.logro_extraccion?.por_fuente?.[f] ?? 0;
+              return (
+                <li key={f}>
+                  {etiqueta}: meta {meta}, logrado {hecho}
+                </li>
+              );
+            })}
+          </ul>
+          {e.presupuesto_carreras && (
+            <ul className="mt-1 list-disc pl-5">
+              {Object.entries(e.presupuesto_carreras).map(([c, meta]) => (
+                <li key={c}>
+                  {c}: meta {meta}, logrado {e.logro_extraccion?.por_carrera?.[c] ?? 0}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
       {e.conteo_por_fuente && (
         <table className="tabla mt-3">
           <thead><tr><th>Fuente</th><th>Encontradas</th><th>Guardadas</th><th>Consultas</th><th>Con error</th></tr></thead>

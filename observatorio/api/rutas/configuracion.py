@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from observatorio.api.seguridad import get_db, solo_admin, usuario_actual
 from observatorio.db.modelos import Catalogo, Config, NoCatalogado, Sinonimo, TerminoBusqueda, Usuario
+from observatorio.distribucion import FUENTES_EXTRACCION, normalizar_porcentajes, validar_distribucion
 from observatorio.parametros import POR_DEFECTO, leer_config
 from observatorio.pipeline.software import DetectorSoftware
 
@@ -250,6 +251,56 @@ def ver_config(_: Usuario = Depends(usuario_actual), s: Session = Depends(get_db
     return [{"clave": k, "valor": cfg.get(k), "descripcion": POR_DEFECTO[k]["descripcion"]} for k in POR_DEFECTO]
 
 
+def _validar_valor_config(clave: str, valor, cfg: dict):
+    if clave == "distribucion_fuentes":
+        if not isinstance(valor, dict):
+            raise HTTPException(400, "distribucion_fuentes debe ser un objeto con porcentajes.")
+        try:
+            return validar_distribucion(valor, claves=list(FUENTES_EXTRACCION))
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+    if clave == "distribucion_carreras":
+        if not isinstance(valor, dict):
+            raise HTTPException(400, "distribucion_carreras debe ser un objeto con porcentajes.")
+        carreras = list(cfg.get("carreras") or [])
+        try:
+            return validar_distribucion(valor, claves=carreras)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+    return valor
+
+
+@router.post("/config/distribucion/normalizar")
+def normalizar_distribucion(
+    clave: str,
+    d: ValorConfig,
+    admin: Usuario = Depends(solo_admin),
+    s: Session = Depends(get_db),
+):
+    if clave not in ("distribucion_fuentes", "distribucion_carreras"):
+        raise HTTPException(400, "Solo aplican distribucion_fuentes o distribucion_carreras.")
+    if not isinstance(d.valor, dict):
+        raise HTTPException(400, "El cuerpo debe incluir «valor» como objeto de porcentajes.")
+    try:
+        normalizado = normalizar_porcentajes(d.valor)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    cfg = leer_config(s)
+    claves = list(FUENTES_EXTRACCION) if clave == "distribucion_fuentes" else list(cfg.get("carreras") or [])
+    try:
+        normalizado = validar_distribucion(normalizado, claves=claves)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    fila = s.get(Config, clave)
+    if fila is None:
+        fila = Config(clave=clave, descripcion=POR_DEFECTO[clave]["descripcion"])
+        s.add(fila)
+    fila.valor = normalizado
+    fila.actualizado_por = admin.email
+    s.commit()
+    return {"clave": clave, "valor": normalizado}
+
+
 @router.put("/config/{clave}")
 def editar_config(clave: str, d: ValorConfig, admin: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
     if clave not in POR_DEFECTO:
@@ -257,6 +308,8 @@ def editar_config(clave: str, d: ValorConfig, admin: Usuario = Depends(solo_admi
     esperado = type(POR_DEFECTO[clave]["valor"])
     if not isinstance(d.valor, esperado) and not (esperado is int and isinstance(d.valor, float)):
         raise HTTPException(400, f"El valor debe ser de tipo {esperado.__name__} (como el valor por defecto).")
+    cfg = leer_config(s)
+    d.valor = _validar_valor_config(clave, d.valor, cfg)
     fila = s.get(Config, clave)
     if fila is None:
         fila = Config(clave=clave, descripcion=POR_DEFECTO[clave]["descripcion"])

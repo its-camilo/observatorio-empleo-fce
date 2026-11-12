@@ -70,6 +70,22 @@ def imprimir_reporte(e) -> None:
     print(f"Total del corte: {e.total_corte} (meta {e.meta_ofertas})  ·  mini corrida: {'sí' if e.mini_corrida else 'no'}")
     print("Por fuente:", json.dumps(e.conteo_por_fuente or {}, ensure_ascii=False))
     print("Por carrera:", json.dumps(e.conteo_por_carrera or {}, ensure_ascii=False))
+    logro = (e.parametros or {}).get("logro_extraccion")
+    presu_f = (e.parametros or {}).get("presupuesto_fuentes") or {}
+    presu_c = (e.parametros or {}).get("presupuesto_carreras") or {}
+    if logro or presu_f or presu_c:
+        print("Extracción (crudas) — objetivo vs logrado:")
+        obj = logro.get("objetivo") if logro else (e.parametros or {}).get("objetivo_ofertas_corrida")
+        if obj:
+            print(f"  Objetivo global: {obj}")
+        por_f = (logro or {}).get("por_fuente") or {}
+        for f, meta in sorted(presu_f.items()):
+            nom = {"linkedin": "LinkedIn", "indeed": "Indeed", "computrabajo": "Computrabajo"}.get(f, f)
+            hecho = por_f.get(nom, por_f.get(f, 0))
+            print(f"  · {nom}: meta {meta}, logrado {hecho}")
+        por_c = (logro or {}).get("por_carrera") or {}
+        for c, meta in sorted(presu_c.items()):
+            print(f"  · {c}: meta {meta}, logrado {por_c.get(c, 0)}")
     if e.uso_llm:
         print("Clasificación con IA:", json.dumps(e.uso_llm, ensure_ascii=False))
     m, sg = divmod(e.duracion_segundos or 0, 60)
@@ -88,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--semestre")
     p.add_argument("--corte", choices=["inicio", "mitad", "final", "Inicio", "Mitad", "Final"])
     p.add_argument("--run-id", dest="run_id")
-    p.add_argument("--fuente", help="linkedin | indeed | google | computrabajo")
+    p.add_argument("--fuente", help="linkedin | indeed | computrabajo")
     p.add_argument("--fuentes", help="Lista separada por comas para limitar las fuentes")
     p.add_argument("--fragmento", type=int, default=0)
     p.add_argument("--fragmentos", type=int, default=1)

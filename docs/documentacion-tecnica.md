@@ -47,7 +47,7 @@ y una marca `procesada`. Relanzar con el mismo `run_id` nunca duplica.
 |---|---|---|
 | RF-01 Configuración | Parámetros editables sin código (tabla `config`), términos, catálogo | `parametros.py`, `db/semilla.py`, `datos/*.json`, `api/rutas/configuracion.py`, páginas Configuración/Términos/Catálogo |
 | RF-02 LinkedIn | Búsqueda JobSpy + endpoint público de invitados; detalle con reintentos | `scraper/linkedin.py`, `scraper/http.py` |
-| RF-03 Otras fuentes | Indeed, Google Jobs (JobSpy), Computrabajo (requests + BeautifulSoup) | `scraper/jobspy_fuentes.py`, `scraper/computrabajo.py` |
+| RF-03 Otras fuentes | Indeed (JobSpy), Computrabajo (requests + BeautifulSoup) | `scraper/jobspy_fuentes.py`, `scraper/computrabajo.py` |
 | RF-04 Campos | Diccionario de datos sec. 9 | `db/modelos.py` (`Oferta`, `OfertaSoftware`, `Catalogo`, `Ejecucion`), `pipeline/limpieza.py` |
 | RF-05 Softwares | Catálogo + sinónimos, palabra completa, reglas para ambiguos | `pipeline/software.py`, tablas `catalogo`/`sinonimos` |
 | RF-06 Carrera | Reglas + LLM gratuito para dudosas; descarta no relevantes; hasta 5 carreras | `pipeline/clasificacion.py`, `pipeline/llm.py` |
@@ -134,7 +134,6 @@ El reporte deja constancia si aun así no se llega.
 |---|---|---|---|
 | LinkedIn | JobSpy (búsqueda) + `jobs-guest/jobs/api/jobPosting/<id>` (detalle) | `scraper/linkedin.py` | ofertas sin descripción (`sin_detalle`), 0 tarjetas, HTTP 429/999 |
 | Indeed | JobSpy `country_indeed="Colombia"` | `scraper/jobspy_fuentes.py` | 0 resultados en todas las consultas |
-| Google Jobs | JobSpy `site="google"` | `scraper/jobspy_fuentes.py` | “no job data returned” (bloqueo frecuente desde la nube) |
 | Computrabajo | `co.computrabajo.com/trabajo-de-<término>[-en-<lugar>]?p=N` + página de detalle | `scraper/computrabajo.py` | `article.box_offer` vacío, descripción vacía |
 | Coursera | GraphQL público del buscador | `scraper/cursos.py` | error de esquema GraphQL |
 | edX | Índice público de búsqueda (Algolia) con la llave pública leída de edx.org (o `EDX_ALGOLIA_APP_ID/KEY`) | `scraper/cursos.py` | “no se encontró la llave pública” |
@@ -170,8 +169,10 @@ desactive la fuente en Configuración → `fuentes` (las demás siguen).
   trabajos paralelos de Actions (IPs distintas) durante varias horas.
 
 ### Otras fuentes
-Indeed y Google Jobs también restringen el scraping en sus términos; Computrabajo publica las ofertas abiertamente pero
-aplica las mismas cautelas (pausas, sin login). Google Jobs suele no devolver datos desde IPs de nube: el reporte lo avisa.
+Indeed también restringe el scraping en sus términos; Computrabajo publica las ofertas abiertamente pero
+aplica las mismas cautelas (pausas, sin login).
+
+El objetivo de ofertas crudas por corrida se reparte con `config.distribucion_fuentes` y `config.distribucion_carreras` (porcentajes que suman 100).
 
 ### Datos personales y seguridad
 - No se guardan nombres de reclutadores, correos ni teléfonos (se eliminan de la descripción) ni salarios.

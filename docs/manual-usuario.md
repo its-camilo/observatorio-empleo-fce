@@ -6,7 +6,7 @@ Para monitores de Gestión del Conocimiento (GC). No necesita saber programar.
 
 Cada vez que se lanza una **corrida** el aplicativo:
 
-1. Busca ofertas de empleo y de práctica de los **últimos 30 días** en LinkedIn, Indeed, Google Jobs y Computrabajo,
+1. Busca ofertas de empleo y de práctica de los **últimos 30 días** en LinkedIn, Indeed y Computrabajo,
    con los términos de búsqueda de cada carrera, en Bogotá, las principales ciudades y remoto Colombia.
 2. Limpia los datos, elimina las ofertas repetidas y **descarta las que no son de la FCE**.
 3. Asigna cada oferta a una o varias carreras (Administración de Empresas, Contaduría Pública, Economía).
@@ -114,6 +114,6 @@ revóquelo si se pierde): hereda su rol (consulta; los admins también ven estad
 
 - **¿Por qué hay menos de 10 000 ofertas?** Las fuentes limitan cuántas dejan ver; el aplicativo hace una mini corrida y,
   si aun así no llega, lo dice en el reporte.
-- **¿Por qué Google Jobs trae 0?** Google suele bloquear consultas desde servidores en la nube; las demás fuentes siguen.
+- **Reparto de extracción:** en **Configuración** puede ajustar el % del objetivo entre fuentes y entre carreras (deben sumar 100 %).
 - **¿Se guardan datos personales o salarios?** No. Se eliminan correos, teléfonos y salarios de las descripciones.
 - **Encontré una oferta mal clasificada.** Anótela en Validación o avise a Desarrollo con su id (ej. `LI-123456`).
