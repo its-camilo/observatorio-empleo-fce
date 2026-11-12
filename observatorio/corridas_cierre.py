@@ -100,7 +100,7 @@ def _hubo_trabajo(s: Session, ejec: Ejecucion) -> bool:
     parts = list(s.scalars(select(Particion).where(Particion.id_ejecucion == ejec.id_ejecucion)))
     if not parts:
         return ejec.ofertas_encontradas > 0 or ejec.fase not in (None, "en_cola", "preparada")
-    return any(p.estado in ("hecha", "error") for p in parts)
+    return any(p.estado in ("hecha", "omitida", "error") for p in parts)
 
 
 def _estado_cierre_por_trabajo(s: Session, ejec: Ejecucion, conclusion: str | None) -> str:

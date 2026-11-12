@@ -94,3 +94,14 @@ def max_particiones_fuente(presupuesto: int, max_por_particion: int) -> int:
     if presupuesto <= 0:
         return 0
     return max(1, math.ceil(presupuesto / max_por_particion))
+
+
+def presupuesto_fuente_carrera(presupuesto_fuentes: dict[str, int], cfg: dict) -> dict[str, dict[str, int]]:
+    """Cupo de cada fuente repartido entre carreras (así ninguna carrera se queda sin consultas en ninguna fuente)."""
+    salida: dict[str, dict[str, int]] = {}
+    for f, cupo in (presupuesto_fuentes or {}).items():
+        if int(cupo or 0) > 0:
+            reparto = presupuesto_por_carrera(int(cupo), cfg)
+            if reparto:
+                salida[f] = reparto
+    return salida
