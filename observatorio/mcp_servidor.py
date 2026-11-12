@@ -3,10 +3,11 @@
 - Público y de SOLO LECTURA para cualquiera, sin iniciar sesión: ofertas,
   rankings, comparación entre cortes, catálogo, ejecuciones, cursos y resúmenes.
   No expone usuarios, validaciones, tokens ni configuración interna.
-- Herramientas de administración (lanzar_corrida, estado_corrida) solo con un
-  token personal de administrador (cabecera `Authorization: Bearer obs_...`),
-  generado y revocado en el aplicativo (página "Tokens MCP"). Sin token válido
-  esas herramientas ni siquiera aparecen en la lista.
+- Con token personal (cabecera `Authorization: Bearer obs_...`) desde la página
+  "Tokens MCP", las herramientas heredan el rol del usuario que lo creó:
+  las mismas herramientas públicas de lectura; estado_corrida y lanzar_corrida
+  solo si el dueño del token es administrador. Sin token, solo
+  herramientas públicas de lectura.
 - Límite básico de solicitudes por IP y topes en los resultados.
 
 Se implementa con el SDK oficial de Python (`mcp`, MCPServer) en modo sin
@@ -22,6 +23,7 @@ import threading
 import time
 from collections import defaultdict, deque
 from contextvars import ContextVar
+from dataclasses import dataclass
 from typing import Any
 
 import anyio
@@ -41,10 +43,17 @@ MAX_DESCRIPCION = 2000
 MAX_RANKING = 50
 MAX_CURSOS = 100
 MAX_EJECUCIONES = 50
-HERRAMIENTAS_ADMIN = {"lanzar_corrida", "estado_corrida"}
+HERRAMIENTAS_SOLO_ADMIN = {"lanzar_corrida", "estado_corrida"}
+HERRAMIENTAS_PRIVILEGIADAS = HERRAMIENTAS_SOLO_ADMIN
 
-# Correo del admin autenticado en la solicitud actual (None = anónimo, solo lectura)
-_admin_actual: ContextVar[str | None] = ContextVar("mcp_admin_actual", default=None)
+
+@dataclass(frozen=True)
+class SesionMcp:
+    email: str
+    rol: str  # admin | usuario
+
+
+_mcp_sesion: ContextVar[SesionMcp | None] = ContextVar("mcp_sesion", default=None)
 
 
 # ---------------------------------------------------------------------------
@@ -79,24 +88,39 @@ def _corte(c: str | None) -> str | None:
     return c
 
 
+def _sesion() -> SesionMcp | None:
+    return _mcp_sesion.get()
+
+
+def _requiere_sesion() -> SesionMcp:
+    s = _sesion()
+    if s is None:
+        raise ToolError("Esta herramienta requiere un token personal del Observatorio (Authorization: Bearer obs_...).")
+    return s
+
+
 def _requiere_admin() -> str:
-    email = _admin_actual.get()
-    if not email:
-        raise ToolError("Esta herramienta requiere un token de administrador del Observatorio (Authorization: Bearer obs_...).")
-    return email
+    s = _requiere_sesion()
+    if s.rol != "admin":
+        raise ToolError("Esta herramienta requiere un token de un administrador del Observatorio.")
+    return s.email
 
 
 class ServidorObservatorio(MCPServer):
-    """MCPServer que oculta las herramientas de administración a quien no tiene token válido."""
+    """Oculta herramientas privilegiadas según sesión MCP (rol heredado del dueño del token)."""
 
     async def list_tools(self):
         herramientas = await super().list_tools()
-        if _admin_actual.get() is None:
-            herramientas = [h for h in herramientas if h.name not in HERRAMIENTAS_ADMIN]
+        ses = _sesion()
+        if ses is None:
+            herramientas = [h for h in herramientas if h.name not in HERRAMIENTAS_PRIVILEGIADAS]
+        elif ses.rol != "admin":
+            herramientas = [h for h in herramientas if h.name not in HERRAMIENTAS_PRIVILEGIADAS]
         return herramientas
 
     async def call_tool(self, name: str, arguments: dict[str, Any], context=None, *args, **kwargs):
-        if name in HERRAMIENTAS_ADMIN and _admin_actual.get() is None:
+        ses = _sesion()
+        if name in HERRAMIENTAS_PRIVILEGIADAS and (ses is None or ses.rol != "admin"):
             raise ToolError(f"Herramienta desconocida o no autorizada: {name}")
         return await super().call_tool(name, arguments, context, *args, **kwargs)
 
@@ -266,22 +290,23 @@ class AppMcp:
         if not self.limitador.permitir(ip):
             await self._responder(send, 429, {"error": "Demasiadas solicitudes. Espere un minuto e intente de nuevo."})
             return
-        email = None
+        sesion: SesionMcp | None = None
         auth = self._cabecera(scope, b"authorization")
         if auth and auth.lower().startswith("bearer "):
             token = auth.split(" ", 1)[1].strip()
 
-            def verificar() -> str | None:
-                from observatorio.api.seguridad import admin_por_token_mcp
+            def verificar() -> SesionMcp | None:
+                from observatorio.api.seguridad import usuario_por_token_mcp
                 with fabrica_sesiones()() as s:
-                    u = admin_por_token_mcp(s, token)
-                    return u.email if u else None
-            email = await anyio.to_thread.run_sync(verificar)
-        marca = _admin_actual.set(email)
+                    u = usuario_por_token_mcp(s, token)
+                    return SesionMcp(u.email, u.rol) if u else None
+
+            sesion = await anyio.to_thread.run_sync(verificar)
+        marca = _mcp_sesion.set(sesion)
         try:
             gestor = StreamableHTTPSessionManager(app=self.servidor._lowlevel_server, stateless=True, json_response=True,
                                                   security_settings=self.seguridad)
             async with gestor.run():
                 await gestor.handle_request(scope, receive, send)
         finally:
-            _admin_actual.reset(marca)
+            _mcp_sesion.reset(marca)

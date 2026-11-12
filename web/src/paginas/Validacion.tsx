@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import { useEsAdmin } from "../main";
 import { Aviso, Cargando, Kpi, SelectorCorte, Titulo, useDatos } from "../componentes/ui";
 
 type Stats = { total: number; validados: number; correctos: number; precision: number | null; meta: number; cumple_meta: boolean };
@@ -9,7 +10,7 @@ type Item = {
   oferta: { id_oferta: string; cargo: string; empresa: string; url: string; descripcion: string; detecciones: { software: string; texto_encontrado: string }[] } | null;
 };
 
-function Revision({ id, alCambiar }: { id: string; alCambiar: () => void }) {
+function Revision({ id, alCambiar, admin }: { id: string; alCambiar: () => void; admin: boolean }) {
   const { datos, recargar } = useDatos<{ estadisticas: Stats; items: Item[] }>(`/validacion/muestras/${id}`, [id]);
   const [i, setI] = useState(0);
   const [form, setForm] = useState({ softwares_faltantes: "", softwares_sobrantes: "", comentario: "" });
@@ -47,15 +48,21 @@ function Revision({ id, alCambiar }: { id: string; alCambiar: () => void }) {
           </div>
           <div className="text-sm"><b>Softwares detectados:</b> {item.oferta.detecciones.length ? item.oferta.detecciones.map((d) => <span key={d.software} className="chip">{d.software} ← “{d.texto_encontrado}”</span>) : "ninguno"}</div>
           <pre className="mt-2 max-h-80 overflow-y-auto whitespace-pre-wrap rounded bg-slate-50 p-2 font-sans text-sm">{item.oferta.descripcion}</pre>
-          <div className="mt-2 grid gap-2 md:grid-cols-3">
-            <input className="campo" placeholder="Softwares que faltaron" value={form.softwares_faltantes} onChange={(e) => setForm({ ...form, softwares_faltantes: e.target.value })} />
-            <input className="campo" placeholder="Softwares detectados por error" value={form.softwares_sobrantes} onChange={(e) => setForm({ ...form, softwares_sobrantes: e.target.value })} />
-            <input className="campo" placeholder="Comentario" value={form.comentario} onChange={(e) => setForm({ ...form, comentario: e.target.value })} />
-          </div>
-          <div className="mt-2 flex gap-2">
-            <button className="btn" onClick={() => marcar("correcto")}>Correcto</button>
-            <button className="btn-sec border-red-300 text-red-700" onClick={() => marcar("incorrecto")}>Incorrecto</button>
-          </div>
+          {admin ? (
+            <>
+              <div className="mt-2 grid gap-2 md:grid-cols-3">
+                <input className="campo" placeholder="Softwares que faltaron" value={form.softwares_faltantes} onChange={(e) => setForm({ ...form, softwares_faltantes: e.target.value })} />
+                <input className="campo" placeholder="Softwares detectados por error" value={form.softwares_sobrantes} onChange={(e) => setForm({ ...form, softwares_sobrantes: e.target.value })} />
+                <input className="campo" placeholder="Comentario" value={form.comentario} onChange={(e) => setForm({ ...form, comentario: e.target.value })} />
+              </div>
+              <div className="mt-2 flex gap-2">
+                <button className="btn" onClick={() => marcar("correcto")}>Correcto</button>
+                <button className="btn-sec border-red-300 text-red-700" onClick={() => marcar("incorrecto")}>Incorrecto</button>
+              </div>
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-slate-600">Solo los administradores pueden registrar revisiones. Puede consultar esta muestra en modo lectura.</p>
+          )}
         </div>
       )}
     </div>
@@ -63,6 +70,7 @@ function Revision({ id, alCambiar }: { id: string; alCambiar: () => void }) {
 }
 
 export default function Validacion() {
+  const admin = useEsAdmin();
   const { datos: cortes } = useDatos<{ semestre: string; corte: string; ofertas: number }[]>("/analisis/cortes");
   const { datos: muestras, recargar } = useDatos<Muestra[]>("/validacion/muestras");
   const [sel, setSel] = useState("");
@@ -87,7 +95,7 @@ export default function Validacion() {
       <div className="tarjeta flex flex-wrap items-end gap-2">
         <div><label className="etiqueta">Corte</label><SelectorCorte cortes={cortes || []} valor={sel} onCambio={setSel} /></div>
         <div><label className="etiqueta">Tamaño</label><input type="number" className="campo w-20" value={tamano} onChange={(e) => setTamano(Number(e.target.value))} /></div>
-        <button className="btn" disabled={!sel} onClick={crear}>Nueva muestra</button>
+        {admin && <button className="btn" disabled={!sel} onClick={crear}>Nueva muestra</button>}
       </div>
       {muestras && muestras.length > 0 && (
         <div className="tarjeta overflow-x-auto">
@@ -101,7 +109,7 @@ export default function Validacion() {
           </table>
         </div>
       )}
-      {activa && <Revision id={activa} alCambiar={recargar} />}
+      {activa && <Revision id={activa} alCambiar={recargar} admin={admin} />}
     </div>
   );
 }

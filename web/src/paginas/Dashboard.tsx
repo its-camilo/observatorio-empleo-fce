@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Aviso, Barras, Cargando, EstadoChip, Kpi, Titulo, useDatos } from "../componentes/ui";
+import { useEsAdmin } from "../main";
 import { Ejecucion } from "./Ejecuciones";
 
 type Resumen = {
@@ -19,14 +20,17 @@ type Datos = {
 const aBarras = (o: Record<string, number>) => Object.entries(o).map(([etiqueta, valor]) => ({ etiqueta, valor }));
 
 export default function Dashboard() {
+  const admin = useEsAdmin();
   const { datos, error } = useDatos<Datos>("/dashboard");
   if (error) return <Aviso tipo="error">{error}</Aviso>;
   if (!datos) return <Cargando />;
   const r = datos.resumen;
   return (
     <div>
-      <Titulo extra={<Link className="btn" to="/lanzar">Lanzar corrida</Link>}>Inicio</Titulo>
-      {!r && <Aviso>Aún no hay ofertas. Lance la primera corrida desde “Lanzar corrida”.</Aviso>}
+      <Titulo extra={admin ? <Link className="btn" to="/lanzar">Lanzar corrida</Link> : undefined}>Inicio</Titulo>
+      {!r && (
+        <Aviso>{admin ? "Aún no hay ofertas. Lance la primera corrida desde “Lanzar corrida”." : "Aún no hay ofertas en el observatorio."}</Aviso>
+      )}
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Kpi etiqueta="Último corte" valor={r ? `${r.semestre} · ${r.corte}` : "—"} />
         <Kpi etiqueta="Ofertas del corte" valor={(r?.total_ofertas ?? 0).toLocaleString("es-CO")} nota="meta: 10.000 únicas" />
@@ -46,23 +50,25 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-      <div className="tarjeta mt-4">
-        <h2 className="mb-2 font-semibold">Últimas corridas</h2>
-        <table className="tabla">
-          <thead><tr><th>Ejecución</th><th>Corte</th><th>Estado</th><th>Guardadas</th><th>Por</th></tr></thead>
-          <tbody>
-            {datos.ultimas_corridas.map((e) => (
-              <tr key={e.id_ejecucion}>
-                <td><Link className="text-unal-oscuro underline" to={`/ejecuciones/${e.id_ejecucion}`}>{e.id_ejecucion}</Link></td>
-                <td>{e.semestre} · {e.corte}</td>
-                <td><EstadoChip estado={e.estado} /></td>
-                <td>{e.ofertas_guardadas}</td>
-                <td className="text-xs">{e.ejecutado_por}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {admin && datos.ultimas_corridas.length > 0 && (
+        <div className="tarjeta mt-4">
+          <h2 className="mb-2 font-semibold">Últimas corridas</h2>
+          <table className="tabla">
+            <thead><tr><th>Ejecución</th><th>Corte</th><th>Estado</th><th>Guardadas</th><th>Por</th></tr></thead>
+            <tbody>
+              {datos.ultimas_corridas.map((e) => (
+                <tr key={e.id_ejecucion}>
+                  <td><Link className="text-unal-oscuro underline" to={`/ejecuciones/${e.id_ejecucion}`}>{e.id_ejecucion}</Link></td>
+                  <td>{e.semestre} · {e.corte}</td>
+                  <td><EstadoChip estado={e.estado} /></td>
+                  <td>{e.ofertas_guardadas}</td>
+                  <td className="text-xs">{e.ejecutado_por}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

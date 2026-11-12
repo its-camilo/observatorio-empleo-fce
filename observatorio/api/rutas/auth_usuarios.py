@@ -109,22 +109,23 @@ def _token(t: TokenMcp) -> dict:
 
 
 @router.get("/tokens-mcp")
-def listar_tokens(admin: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
-    return [_token(t) for t in s.scalars(select(TokenMcp).where(TokenMcp.email == admin.email).order_by(TokenMcp.id.desc()))]
+def listar_tokens(u: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
+    return [_token(t) for t in s.scalars(select(TokenMcp).where(TokenMcp.email == u.email).order_by(TokenMcp.id.desc()))]
 
 
 @router.post("/tokens-mcp")
-def crear_token(datos: NuevoToken, admin: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
-    token, fila = generar_token_mcp(s, admin.email, datos.nombre)
+def crear_token(datos: NuevoToken, u: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
+    token, fila = generar_token_mcp(s, u.email, datos.nombre)
     s.commit()
     return {**_token(fila), "token": token,
-            "aviso": "Copie el token ahora: no se volverá a mostrar. Se guarda solo su huella (hash)."}
+            "aviso": "Copie el token ahora: no se volverá a mostrar. Se guarda solo su huella (hash). Hereda su rol en el MCP "
+                     f"({'administrador (incluye corridas)' if u.rol == 'admin' else 'solo lectura, sin herramientas de corrida'})."}
 
 
 @router.delete("/tokens-mcp/{tid}")
-def revocar_token(tid: int, admin: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
+def revocar_token(tid: int, u: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
     t = s.get(TokenMcp, tid)
-    if t is None or t.email != admin.email:
+    if t is None or t.email != u.email:
         raise HTTPException(404, "Token no encontrado")
     t.revocado = True
     return _token(t)

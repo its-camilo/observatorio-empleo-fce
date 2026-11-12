@@ -61,6 +61,24 @@ def test_token_admin_habilita_herramientas_y_se_revoca(cliente):
     assert "lanzar_corrida" not in herramientas(cliente, "obs_inventado")
 
 
+def test_token_usuario_solo_lectura_en_mcp(cliente):
+    admin = cliente.post("/api/auth/dev", json={"email": "uniic_bog@unal.edu.co"}).json()["token"]
+    HA = {"Authorization": f"Bearer {admin}"}
+    mon = cliente.get("/api/usuarios", headers=HA).json()
+    u = next(x for x in mon if x["email"] == "monitor@unal.edu.co") if any(x["email"] == "monitor@unal.edu.co" for x in mon) else None
+    if u is None:
+        cliente.post("/api/auth/dev", json={"email": "monitor@unal.edu.co"})
+        u = next(x for x in cliente.get("/api/usuarios", headers=HA).json() if x["email"] == "monitor@unal.edu.co")
+    cliente.put(f"/api/usuarios/{u['id']}", json={"estado": "aprobado"}, headers=HA)
+    sesion = cliente.post("/api/auth/dev", json={"email": "monitor@unal.edu.co"}).json()["token"]
+    HU = {"Authorization": f"Bearer {sesion}"}
+    t = cliente.post("/api/tokens-mcp", json={"nombre": "lectura"}, headers=HU).json()
+    h = herramientas(cliente, t["token"])
+    assert "estado_corrida" not in h and "lanzar_corrida" not in h
+    r = rpc(cliente, "tools/call", {"name": "estado_corrida", "arguments": {"run_id": "x"}}, token=t["token"])
+    assert r["result"]["isError"] is True
+
+
 def test_token_guardado_solo_como_hash(cliente, sesion):
     from observatorio.db.modelos import TokenMcp
 
