@@ -160,6 +160,12 @@ def main(argv: list[str] | None = None) -> int:
             e = orq.correr_completa(s, a.semestre, a.corte, a.run_id, a.ejecutado_por, a.modo, fuentes, a.terminos, a.ubicaciones,
                                     a.max_por_particion, usar_llm=not a.sin_llm, cursos=not a.sin_cursos, ejecutor="local")
             imprimir_reporte(e)
+            if os.getenv("GITHUB_ACTIONS") and e.estado != "completada":
+                # Que GitHub Actions muestre lo mismo que el front (aviso amarillo en el resumen del run)
+                for err in (e.errores_detalle or [])[:10]:
+                    print(f"::warning title=Corrida {e.estado}::{str(err).replace(chr(10), ' ')}")
+                if not e.errores_detalle:
+                    print(f"::warning title=Corrida {e.estado}::La corrida terminó en estado {e.estado}.")
             return 0 if e.estado in ("completada", "incompleta") else 1
         if a.accion == "preparar":
             e = orq.preparar(s, a.semestre, a.corte, a.run_id, a.ejecutado_por, a.modo, fuentes, a.terminos, a.ubicaciones,

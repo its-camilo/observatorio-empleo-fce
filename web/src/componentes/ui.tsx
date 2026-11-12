@@ -93,8 +93,8 @@ export function EstadoChip({ estado }: { estado: string }) {
   const t: Record<string, string> = {
     en_curso: "en curso",
     en_cola: "en cola",
-    fallida: "fallida · con errores",
-    incompleta: "incompleta · con errores",
+    fallida: "fallida",
+    incompleta: "incompleta",
     completada: "completada",
   };
   return (
