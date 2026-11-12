@@ -53,7 +53,12 @@ class Procesador:
         self.ejec = ejec
         self.cfg = cfg
         self.detector = DetectorSoftware.desde_bd(s)
-        self.clasificador = ClasificadorReglas(cfg["reglas_carrera"], cfg["exclusion_titulo"], cfg["carreras"])
+        self.clasificador = ClasificadorReglas(
+            cfg["reglas_carrera"],
+            cfg["exclusion_titulo"],
+            cfg["carreras"],
+            cfg.get("exclusion_operativa_titulo") or [],
+        )
         llm_cfg = dict(cfg.get("llm") or {})
         if not usar_llm:
             llm_cfg["habilitado"] = False

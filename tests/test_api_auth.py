@@ -86,6 +86,7 @@ def test_lanzar_corrida_llama_workflow_dispatch(cliente, monkeypatch):
 
     monkeypatch.setenv("GITHUB_TOKEN", "ghp_prueba")
     monkeypatch.setenv("GITHUB_REPO", "its-camilo/observatorio-empleo-fce")
+    monkeypatch.setenv("GITHUB_WORKFLOW", "corrida.yml")
     llamadas = []
 
     class Resp:

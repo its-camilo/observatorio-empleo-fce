@@ -92,6 +92,13 @@ Tablas del diccionario: `ofertas`, `oferta_software`, `catalogo` (+ `sinonimos`)
 - El nombre de la empresa se borra del texto antes de buscar (Siigo S.A.S. publicando no cuenta como “Siigo”).
 - Pruebe cambios en el aplicativo: Catálogo → *Probar detección*.
 
+### Cargos operativos fuera del alcance
+
+El observatorio prioriza ofertas de nivel analista/profesional o superior (no auxiliar/asistente administrativo de oficina).
+Los patrones editables `exclusion_operativa_titulo` (tabla `config`) descartan el cargo **antes** de las reglas de carrera, para que
+palabras amplias como `administrativ` no clasifiquen como Administración de Empresas un «Auxiliar Administrativo» encontrado en Computrabajo.
+En bases ya pobladas: `python -m observatorio.run purga-operativa` (vista previa) y `python -m observatorio.run purga-operativa --aplicar`.
+
 ### Clasificación y relevancia (RF-06)
 Puntaje por carrera = 3 × palabras fuertes del título + 2 × mención explícita de la carrera en la descripción +
 mín(palabras débiles, 3) + 1 si el término de búsqueda es de esa carrera (`config.reglas_carrera`).

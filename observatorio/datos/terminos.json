@@ -17,9 +17,9 @@
     ],
     "Administración de Empresas": [
       "administrador de empresas", "analista administrativo", "analista de proyectos", "analista de procesos", "coordinador comercial", "practicante de administración",
-      "asistente administrativo", "auxiliar administrativo", "coordinador administrativo", "analista de compras", "analista de talento humano", "analista de recursos humanos",
+      "analista de compras", "analista de talento humano", "analista de recursos humanos",
       "analista de mercadeo", "coordinador de operaciones", "analista de operaciones", "gerente de proyectos", "project manager", "analista de calidad",
-      "ejecutivo comercial", "analista de logística", "jefe administrativo", "asistente de gerencia", "practicante administrativo", "aprendiz administrativo",
+      "ejecutivo comercial", "analista de logística", "jefe administrativo", "asistente de gerencia",
       "analista de planeación", "business analyst", "analista de servicio al cliente", "coordinador de talento humano", "practicante de mercadeo", "management trainee"
     ]
   },
@@ -33,7 +33,7 @@
       "planeación financiera", "FP&A", "tesorería corporativa", "seguros", "actuarial", "banca de inversión", "investigación de mercados", "consultoría"
     ],
     "Administración de Empresas": [
-      "administración", "gestión administrativa", "operaciones", "compras", "logística", "recursos humanos", "talento humano", "mercadeo", "ventas", "servicio al cliente",
+      "administración", "operaciones", "compras", "logística", "recursos humanos", "talento humano", "mercadeo", "ventas", "servicio al cliente",
       "gestión de proyectos", "procesos", "calidad", "planeación estratégica", "emprendimiento", "comercio exterior", "abastecimiento", "gestión documental", "asistente ejecutivo"
     ]
   }

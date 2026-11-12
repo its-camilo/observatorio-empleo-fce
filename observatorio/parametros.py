@@ -99,6 +99,17 @@ POR_DEFECTO: dict[str, dict[str, Any]] = {
                   "ingeniero electrónico", "ingeniero mecánico", "data engineer", "ingeniero de datos", "qa ", "tester", "soporte técnico"],
         "descripcion": "Si el título tiene alguna de estas palabras y ninguna palabra fuerte de carrera, la oferta se descarta como no relevante.",
     },
+    "exclusion_operativa_titulo": {
+        "valor": [
+            "auxiliar administrativ", "asistente administrativ", "aprendiz administrativ", "practicante administrativ",
+            "coordinador administrativ", "secretari", "recepcionista", "auxiliar de oficina", "asistente de oficina",
+            "auxiliar general", "digitador", "auxiliar de archivo", "auxiliar de correspondencia", "auxiliar de servicios generales",
+            "auxiliar de gestion documental", "auxiliar de gestión documental", "auxiliar de soporte administrativ",
+            "asistente de archivo", "mensajero", "auxiliar de logistica", "auxiliar de logística", "auxiliar de almacen",
+            "auxiliar de almacén", "auxiliar de inventario",
+        ],
+        "descripcion": "Cargos administrativos u operativos de bajo nivel que se descartan siempre (el observatorio prioriza analista, coordinación de área, gerencia, etc.).",
+    },
     "cursos": {
         "valor": {
             "activo": True, "plataformas": ["coursera", "edx", "platzi"], "max_por_termino": 15,

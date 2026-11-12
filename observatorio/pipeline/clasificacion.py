@@ -54,10 +54,23 @@ def _contiene(texto_plegado: str, palabra: str) -> bool:
     return re.search(r"(?<![a-z0-9])" + re.escape(w), texto_plegado) is not None
 
 
+def titulo_excluido_operativo(cargo: str, patrones: list[str]) -> bool:
+    """Cargos operativos de bajo nivel que no deben contarse aunque coincidan con reglas amplias (p. ej. «administrativ»)."""
+    t = " " + plegar(cargo) + " "
+    return any(_contiene(t, p) for p in patrones)
+
+
 class ClasificadorReglas:
-    def __init__(self, reglas: dict, exclusion_titulo: list[str], carreras: list[str] | None = None):
+    def __init__(
+        self,
+        reglas: dict,
+        exclusion_titulo: list[str],
+        carreras: list[str] | None = None,
+        exclusion_operativa: list[str] | None = None,
+    ):
         self.reglas = reglas
         self.exclusion = exclusion_titulo
+        self.exclusion_operativa = exclusion_operativa or []
         self.carreras = carreras or list(reglas.keys())
         self.explicitas = {c: [re.compile(p) for p in EXPLICITAS.get(c, [])] for c in self.carreras}
 
@@ -80,6 +93,8 @@ class ClasificadorReglas:
         return fuertes, puntos
 
     def clasificar(self, cargo: str, descripcion: str = "", carrera_termino: str | None = None) -> Clasificacion:
+        if titulo_excluido_operativo(cargo, self.exclusion_operativa):
+            return Clasificacion("no_relevante", [], {}, "cargo operativo de bajo nivel (fuera del alcance del observatorio)")
         fuertes, puntos = self.puntajes(cargo, descripcion, carrera_termino)
         t = " " + plegar(cargo) + " "
         excluido = any(_contiene(t, w) for w in self.exclusion)

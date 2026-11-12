@@ -4,7 +4,12 @@ from observatorio.pipeline.clasificacion import ClasificadorReglas
 
 def clasificador():
     cfg = valores_por_defecto()
-    return ClasificadorReglas(cfg["reglas_carrera"], cfg["exclusion_titulo"], cfg["carreras"])
+    return ClasificadorReglas(
+        cfg["reglas_carrera"],
+        cfg["exclusion_titulo"],
+        cfg["carreras"],
+        cfg.get("exclusion_operativa_titulo"),
+    )
 
 
 def test_titulo_contable():
@@ -43,3 +48,13 @@ def test_dudosa_y_respaldo():
 
 def test_sin_senales():
     assert clasificador().clasificar("Mesero", "Atención en restaurante").estado == "no_relevante"
+
+
+def test_auxiliar_administrativo_no_relevante():
+    c = clasificador().clasificar("Auxiliar Administrativo", "Apoyo en oficina y archivo", "Administración de Empresas")
+    assert c.estado == "no_relevante"
+
+
+def test_analista_administrativo_sigue_relevante():
+    c = clasificador().clasificar("Analista Administrativo", "Profesional en administración de empresas")
+    assert c.estado == "relevante"
