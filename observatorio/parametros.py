@@ -11,6 +11,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from observatorio.capitales import filtrar_ubicaciones_config, ubicaciones_capitales_defecto
+
 CARRERAS = ["Administración de Empresas", "Contaduría Pública", "Economía"]
 
 POR_DEFECTO: dict[str, dict[str, Any]] = {
@@ -35,17 +37,13 @@ POR_DEFECTO: dict[str, dict[str, Any]] = {
         "descripcion": "Porcentaje del objetivo de extracción repartido entre carreras (por término de búsqueda). Debe sumar 100.",
     },
     "ubicaciones": {
-        "valor": [
-            {"nombre": "Bogotá", "linkedin": "Bogotá, Colombia", "indeed": "Bogotá", "computrabajo": "bogota-dc"},
-            {"nombre": "Medellín", "linkedin": "Medellín, Antioquia, Colombia", "indeed": "Medellín", "computrabajo": "antioquia"},
-            {"nombre": "Cali", "linkedin": "Cali, Valle del Cauca, Colombia", "indeed": "Cali", "computrabajo": "valle-del-cauca"},
-            {"nombre": "Barranquilla", "linkedin": "Barranquilla, Atlántico, Colombia", "indeed": "Barranquilla", "computrabajo": "atlantico"},
-            {"nombre": "Bucaramanga", "linkedin": "Bucaramanga, Santander, Colombia", "indeed": "Bucaramanga", "computrabajo": "santander"},
-            {"nombre": "Cartagena", "linkedin": "Cartagena, Bolívar, Colombia", "indeed": "Cartagena", "computrabajo": ""},
-            {"nombre": "Pereira", "linkedin": "Pereira, Risaralda, Colombia", "indeed": "Pereira", "computrabajo": ""},
-            {"nombre": "Remoto Colombia", "linkedin": "Colombia", "indeed": "Colombia", "computrabajo": "", "remoto": True},
-        ],
-        "descripcion": "Ciudades a consultar y cómo se escribe cada una en cada fuente (vacío = no se consulta en esa fuente).",
+        "valor": ubicaciones_capitales_defecto(),
+        "descripcion": "Capitales departamentales (33 jurisdicciones) a consultar en cada fuente. Vacío en computrabajo = no se consulta en esa fuente.",
+    },
+    "solo_capitales_departamento": {
+        "valor": True,
+        "descripcion": "Si está activo, solo se guardan ofertas cuya ciudad normalizada sea una capital departamental "
+                       "(o Remoto). «Colombia»/vacío sin capital explícita se descarta. Las corridas usan solo ubicaciones del catálogo de capitales.",
     },
     "ventana_dias": {"valor": 30, "descripcion": "Solo ofertas publicadas en los últimos N días."},
     "tipo_oferta": {"valor": "ambas", "descripcion": "practica, empleo o ambas."},
@@ -189,4 +187,6 @@ def leer_config(s: Session) -> dict[str, Any]:
         cfg["distribucion_fuentes"] = dict(DISTRIBUCION_FUENTES_DEFECTO)
     if not cfg.get("distribucion_carreras"):
         cfg["distribucion_carreras"] = distribucion_carreras_igualitaria(cfg.get("carreras") or [])
+    solo_cap = bool(cfg.get("solo_capitales_departamento", True))
+    cfg["ubicaciones"] = filtrar_ubicaciones_config(cfg.get("ubicaciones") or [], solo_capitales=solo_cap)
     return cfg

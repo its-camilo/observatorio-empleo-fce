@@ -15,6 +15,7 @@ def test_purga_vista_previa_por_motivo(sesion):
                 semestre="2026-II",
                 corte="Inicio",
                 cargo="Auxiliar administrativo",
+                ciudad="Bogotá",
                 descripcion="Manejo de Excel",
             ),
             Oferta(
@@ -24,6 +25,7 @@ def test_purga_vista_previa_por_motivo(sesion):
                 semestre="2026-II",
                 corte="Inicio",
                 cargo="Analista financiero",
+                ciudad="Bogotá",
                 descripcion="Solo trabajo en equipo y comunicación",
             ),
             Oferta(
@@ -33,6 +35,7 @@ def test_purga_vista_previa_por_motivo(sesion):
                 semestre="2026-II",
                 corte="Inicio",
                 cargo="Analista contable",
+                ciudad="Bogotá",
                 descripcion="SAP y NIIF",
             ),
         ]
@@ -55,6 +58,7 @@ def test_purga_aplicar_borra(sesion):
             semestre="2026-II",
             corte="Inicio",
             cargo="Recepcionista",
+            ciudad="Bogotá",
             descripcion="Atención al público",
         )
     )
