@@ -19,6 +19,7 @@ from observatorio.pipeline.llm import ClienteLLM
 from observatorio.pipeline.no_catalogados import contar_no_catalogados
 from observatorio.pipeline.software import DetectorSoftware
 from observatorio.pipeline.valor_formativo import oferta_tiene_valor_formativo, tiene_descripcion_util
+from observatorio.capitales import es_capital_departamental
 from observatorio.texto import es_colombia, normalizar_clave
 
 log = logging.getLogger("observatorio.procesar")
@@ -30,6 +31,7 @@ TAMANO_BLOQUE = 1500
 class ResultadoProceso:
     crudas: int = 0
     fuera_de_colombia: int = 0
+    fuera_de_capital: int = 0
     fuera_de_ventana: int = 0
     filtradas_tipo: int = 0
     duplicados: int = 0
@@ -43,8 +45,8 @@ class ResultadoProceso:
     ejemplo_nc: dict = field(default_factory=dict)
 
     def sumar(self, otro: "ResultadoProceso") -> None:
-        for k in ("crudas", "fuera_de_colombia", "fuera_de_ventana", "filtradas_tipo", "duplicados", "actualizadas",
-                  "no_relevantes", "guardadas", "por_llm", "por_respaldo"):
+        for k in ("crudas", "fuera_de_colombia", "fuera_de_capital", "fuera_de_ventana", "filtradas_tipo", "duplicados",
+                  "actualizadas", "no_relevantes", "guardadas", "por_llm", "por_respaldo"):
             setattr(self, k, getattr(self, k) + getattr(otro, k))
 
 
@@ -70,6 +72,7 @@ class Procesador:
         self.ventana = int(cfg.get("ventana_dias", 30))
         self.tipo = (cfg.get("tipo_oferta") or "ambas").lower()
         self.requiere_formativo = bool(cfg.get("requiere_software_o_habilidad", True))
+        self.solo_capitales = bool(cfg.get("solo_capitales_departamento", True))
         self.total = ResultadoProceso()
 
     # ------------------------------------------------------------------
@@ -120,6 +123,9 @@ class Procesador:
                 continue
             if not es_colombia(f["ubicacion_original"]):
                 r.fuera_de_colombia += 1
+                continue
+            if self.solo_capitales and not es_capital_departamental(f["ciudad"], f["ubicacion_original"]):
+                r.fuera_de_capital += 1
                 continue
             if f["fecha_publicacion"] and f["fecha_publicacion"] < limite:
                 r.fuera_de_ventana += 1

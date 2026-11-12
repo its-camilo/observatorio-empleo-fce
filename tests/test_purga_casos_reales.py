@@ -21,6 +21,7 @@ def _motivo(detector, cargo: str, descripcion: str | None = None) -> str | None:
         cargo,
         descripcion,
         "",
+        ciudad="Bogotá",
         patrones=patrones,
         detector=detector,
         requiere_formativo=True,
@@ -61,6 +62,7 @@ def test_sin_descripcion_no_cuenta_como_purgable(sesion, detector):
                 semestre="2026-II",
                 corte="Inicio",
                 cargo="Analista CRM y automatización",
+                ciudad="Bogotá",
                 descripcion=None,
             ),
             Oferta(
@@ -70,6 +72,7 @@ def test_sin_descripcion_no_cuenta_como_purgable(sesion, detector):
                 semestre="2026-II",
                 corte="Inicio",
                 cargo="Auxiliar contable y administrativo",
+                ciudad="Bogotá",
                 descripcion="",
             ),
         ]
@@ -95,6 +98,7 @@ def test_vista_previa_incluye_fragmento_descripcion(sesion):
             semestre="2026-II",
             corte="Inicio",
             cargo="Analista financiero",
+            ciudad="Bogotá",
             descripcion="Trabajo en equipo, comunicación y proactividad. Sin herramientas.",
         )
     )

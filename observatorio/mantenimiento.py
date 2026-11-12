@@ -7,6 +7,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from observatorio.db.modelos import Oferta, TerminoBusqueda, Validacion
+from observatorio.capitales import es_capital_departamental
 from observatorio.parametros import leer_config, valores_por_defecto
 from observatorio.pipeline.clasificacion import titulo_excluido_operativo
 from observatorio.pipeline.software import DetectorSoftware
@@ -26,6 +27,7 @@ TERMINOS_BUSQUEDA_RETIRADOS: tuple[str, ...] = (
 MOTIVO_OPERATIVO = "cargo_operativo"
 MOTIVO_SIN_FORMATIVO = "sin_software_ni_habilidad"
 MOTIVO_SIN_DESCRIPCION = "sin_descripcion"
+MOTIVO_FUERA_CAPITAL = "fuera_de_capital"
 
 # Motivos que no se borran con --aplicar por defecto (solo informativos en vista previa).
 MOTIVOS_NO_PURGABLES = frozenset({MOTIVO_SIN_DESCRIPCION})
@@ -55,11 +57,15 @@ def motivo_purga_oferta(
     descripcion: str | None,
     empresa: str | None,
     *,
+    ciudad: str | None = None,
     patrones: list[str],
     detector: DetectorSoftware,
     requiere_formativo: bool,
+    solo_capitales: bool = True,
 ) -> str | None:
     """Motivo de borrado por reglas (sin LLM), o None si la oferta se conserva."""
+    if solo_capitales and not es_capital_departamental(ciudad, None):
+        return MOTIVO_FUERA_CAPITAL
     if titulo_excluido_operativo(cargo or "", patrones):
         return MOTIVO_OPERATIVO
     if requiere_formativo:
@@ -92,6 +98,7 @@ def _scan_ofertas_por_reglas(
     patrones: list[str],
     detector: DetectorSoftware,
     requiere_formativo: bool,
+    solo_capitales: bool,
     *,
     max_ejemplos: int = 20,
 ) -> tuple[list[str], dict[str, int], dict[str, int], dict[str, list[str]], list[dict]]:
@@ -103,22 +110,24 @@ def _scan_ofertas_por_reglas(
     ultimo = ""
     while True:
         filas = s.execute(
-            select(Oferta.id_oferta, Oferta.cargo, Oferta.descripcion, Oferta.empresa, Oferta.fuente)
+            select(Oferta.id_oferta, Oferta.cargo, Oferta.descripcion, Oferta.empresa, Oferta.fuente, Oferta.ciudad)
             .where(Oferta.id_oferta > ultimo)
             .order_by(Oferta.id_oferta)
             .limit(2000)
         ).all()
         if not filas:
             break
-        for oid, cargo, descripcion, empresa, fuente in filas:
+        for oid, cargo, descripcion, empresa, fuente, ciudad in filas:
             ultimo = oid
             motivo = motivo_purga_oferta(
                 cargo or "",
                 descripcion,
                 empresa,
+                ciudad=ciudad,
                 patrones=patrones,
                 detector=detector,
                 requiere_formativo=requiere_formativo,
+                solo_capitales=solo_capitales,
             )
             if not motivo:
                 continue
@@ -135,6 +144,7 @@ def _scan_ofertas_por_reglas(
                         "cargo": cargo,
                         "fuente": fuente,
                         "motivo": motivo,
+                        "ciudad": ciudad,
                         "descripcion_fragmento": _fragmento_descripcion(descripcion),
                         "purgable": motivo not in MOTIVOS_NO_PURGABLES,
                     }
@@ -147,10 +157,11 @@ def purgar_por_reglas(s: Session, *, aplicar: bool = False, max_ejemplos: int = 
     cfg = config_purga(s)
     patrones = list(cfg.get("exclusion_operativa_titulo") or [])
     requiere = bool(cfg.get("requiere_software_o_habilidad", True))
+    solo_capitales = bool(cfg.get("solo_capitales_departamento", True))
     detector = DetectorSoftware.desde_bd(s)
     total_ofertas = s.scalar(select(func.count()).select_from(Oferta)) or 0
     ids, conteos, por_fuente, ejemplos, ejemplos_detalle = _scan_ofertas_por_reglas(
-        s, patrones, detector, requiere, max_ejemplos=max_ejemplos,
+        s, patrones, detector, requiere, solo_capitales, max_ejemplos=max_ejemplos,
     )
     salida: dict = {
         "total_ofertas": total_ofertas,
@@ -161,6 +172,7 @@ def purgar_por_reglas(s: Session, *, aplicar: bool = False, max_ejemplos: int = 
         "por_motivo": conteos,
         "por_fuente_purgables": por_fuente,
         "requiere_software_o_habilidad": requiere,
+        "solo_capitales_departamento": solo_capitales,
         "motivos_no_purgables": sorted(MOTIVOS_NO_PURGABLES),
     }
     if not aplicar:
