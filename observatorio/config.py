@@ -30,6 +30,28 @@ def _bool(valor: str | None) -> bool:
     return str(valor or "").strip().lower() in {"1", "true", "si", "sí", "yes", "on"}
 
 
+def _preferir_pooler_neon(url: str) -> str:
+    """En serverless, Neon recomienda el host con sufijo `-pooler` (PgBouncer)."""
+    if os.getenv("NEON_POOLER", "1").strip().lower() in {"0", "false", "no"}:
+        return url
+    if "neon.tech" not in url or "-pooler." in url:
+        return url
+    host_start = url.find("@")
+    if host_start == -1:
+        return url
+    rest = url[host_start + 1 :]
+    slash = rest.find("/")
+    host = rest if slash == -1 else rest[:slash]
+    suffix = rest[len(host) :]
+    if "-pooler." in host:
+        return url
+    partes = host.split(".", 1)
+    if len(partes) < 2:
+        return url
+    nuevo_host = f"{partes[0]}-pooler.{partes[1]}"
+    return url[: host_start + 1] + nuevo_host + suffix
+
+
 def normalizar_url_bd(url: str) -> str:
     """Neon/Heroku entregan a veces `postgres://`; SQLAlchemy necesita `postgresql://`."""
     # Una URL nunca lleva espacios; al pegarla en un formulario a veces se cuelan
@@ -42,6 +64,8 @@ def normalizar_url_bd(url: str) -> str:
     for prefijo in ("postgres://", "postgresql://"):
         if url.startswith(prefijo):
             url = "postgresql+psycopg2://" + url[len(prefijo):]
+    if url.startswith("postgresql") and os.getenv("VERCEL"):
+        url = _preferir_pooler_neon(url)
     return url
 
 

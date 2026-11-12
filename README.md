@@ -112,6 +112,13 @@ Repositorio público ⇒ minutos de Actions gratuitos sin límite mensual. No se
 
 Vercel no ejecuta las corridas (duran horas); solo las lanza en GitHub Actions y muestra el progreso.
 
+### Rendimiento (cold start y base de datos)
+
+- La ruta pública **`GET /api/salud`** responde sin autenticación. Con **`?db=1`** ejecuta un `SELECT 1` en Postgres y
+  devuelve `db_latencia_ms` (útil para medir Neon tras *scale-to-zero*: suele sumar ~0,5–2 s en la primera consulta).
+- En Vercel la API usa **imports diferidos** (MCP y exportación pesada solo cuando se usan), **NullPool** contra Neon
+  (host con `-pooler` si aplica), región **`iad1`** en `vercel.json` y caché breve en `/api/dashboard`.
+
 ## Servidor propio (migración desde Vercel/Neon)
 
 ```bash

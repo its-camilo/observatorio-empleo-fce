@@ -11,8 +11,6 @@ from observatorio.api.seguridad import get_db, solo_admin, usuario_actual
 from observatorio.db.modelos import Catalogo, Config, NoCatalogado, Sinonimo, TerminoBusqueda, Usuario
 from observatorio.distribucion import FUENTES_EXTRACCION, normalizar_porcentajes, validar_distribucion
 from observatorio.parametros import POR_DEFECTO, leer_config
-from observatorio.pipeline.software import DetectorSoftware
-
 router = APIRouter()
 
 
@@ -136,6 +134,8 @@ class TextoPrueba(BaseModel):
 @router.post("/catalogo/probar")
 def probar_deteccion(d: TextoPrueba, _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
     """Muestra qué softwares detectaría el catálogo actual en un texto (útil para ajustar sinónimos)."""
+    from observatorio.pipeline.software import DetectorSoftware
+
     det = DetectorSoftware.desde_bd(s)
     return [{"software": x.software, "grupo": x.grupo, "texto_encontrado": x.texto_encontrado} for x in det.detectar("", d.texto, d.empresa)]
 

@@ -24,6 +24,31 @@ export function Cargando() {
   return <p className="text-sm text-texto-suave">Cargando…</p>;
 }
 
+export function EsqueletoLinea({ className = "" }: { className?: string }) {
+  return <div className={`h-3 animate-pulse rounded bg-niebla/60 ${className}`} />;
+}
+
+export function EsqueletoKpi() {
+  return (
+    <div className="tarjeta space-y-2">
+      <EsqueletoLinea className="h-2 w-20" />
+      <EsqueletoLinea className="h-7 w-24" />
+      <EsqueletoLinea className="h-2 w-28" />
+    </div>
+  );
+}
+
+export function EsqueletoTarjeta({ alto = "h-40" }: { alto?: string }) {
+  return (
+    <div className={`tarjeta ${alto} space-y-3`}>
+      <EsqueletoLinea className="h-4 w-48" />
+      <EsqueletoLinea className="w-full" />
+      <EsqueletoLinea className="w-11/12" />
+      <EsqueletoLinea className="w-4/5" />
+    </div>
+  );
+}
+
 export function Kpi({ etiqueta, valor, nota }: { etiqueta: string; valor: ReactNode; nota?: string }) {
   return (
     <div className="tarjeta">

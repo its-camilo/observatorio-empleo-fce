@@ -31,10 +31,9 @@ from observatorio.plan_extraccion import (
 from observatorio.scraper.base import Consulta
 from observatorio.scraper.http import FuenteBloqueada, explicar_error
 
-log = logging.getLogger("observatorio.corrida")
+from observatorio.normas_corrida import NOMBRES_FUENTE, normalizar_corte, normalizar_semestre
 
-NOMBRES_FUENTE = {"linkedin": "LinkedIn", "indeed": "Indeed", "computrabajo": "Computrabajo", "google": "Google Jobs"}
-CORTES = {"inicio": "Inicio", "mitad": "Mitad", "final": "Final"}
+log = logging.getLogger("observatorio.corrida")
 
 
 def contar_crudas_ejecucion(s: Session, id_ejecucion: str) -> int:
@@ -67,23 +66,6 @@ def contar_crudas_carrera(s: Session, id_ejecucion: str, carrera: str) -> int:
         )
         or 0
     )
-
-
-def normalizar_corte(corte: str) -> str:
-    c = (corte or "").strip().lower()
-    if c not in CORTES:
-        raise ValueError("El corte debe ser inicio, mitad o final")
-    return CORTES[c]
-
-
-def normalizar_semestre(semestre: str) -> str:
-    import re
-
-    s = (semestre or "").strip().upper().replace(" ", "")
-    m = re.fullmatch(r"(\d{4})-?(I{1,2}|1|2)", s)
-    if not m:
-        raise ValueError("El semestre debe tener la forma 2026-I o 2026-II")
-    return f"{m.group(1)}-{'I' if m.group(2) in ('I', '1') else 'II'}"
 
 
 def crear_extractor(fuente: str, cfg_fuente: dict):

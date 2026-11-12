@@ -1,16 +1,27 @@
 """Conexión a la base de datos (Postgres en producción, SQLite para pruebas)."""
 from __future__ import annotations
 
+import os
 from contextlib import contextmanager
 from typing import Iterator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from observatorio.config import ajustes
 
 _motores: dict[str, Engine] = {}
+
+
+def _serverless_postgres() -> bool:
+    return bool(os.getenv("VERCEL")) or os.getenv("OBSERVATORIO_SERVERLESS", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
 
 def motor(url: str | None = None) -> Engine:
@@ -19,8 +30,12 @@ def motor(url: str | None = None) -> Engine:
         kwargs: dict = {"pool_pre_ping": True, "future": True}
         if url.startswith("sqlite"):
             kwargs["connect_args"] = {"check_same_thread": False}
+        elif _serverless_postgres():
+            kwargs["poolclass"] = NullPool
+            kwargs["connect_args"] = {"connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "8") or 8)}
         else:
             kwargs.update(pool_size=3, max_overflow=2, pool_recycle=300)
+            kwargs["connect_args"] = {"connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "10") or 10)}
         eng = create_engine(url, **kwargs)
         if url.startswith("sqlite"):
             @event.listens_for(eng, "connect")
@@ -54,3 +69,13 @@ def crear_tablas(url: str | None = None) -> None:
     from observatorio.db.modelos import Base
 
     Base.metadata.create_all(motor(url))
+
+
+def latencia_bd_segundos() -> float:
+    """Consulta liviana `SELECT 1` (incluye conexión y cold start de Neon si aplica)."""
+    import time
+
+    t0 = time.perf_counter()
+    with motor().connect() as con:
+        con.execute(text("SELECT 1"))
+    return time.perf_counter() - t0

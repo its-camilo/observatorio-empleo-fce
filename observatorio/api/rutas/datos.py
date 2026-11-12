@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -15,13 +15,14 @@ from observatorio import analisis
 from observatorio.api.seguridad import get_db, solo_admin, usuario_actual
 from observatorio.config import ajustes
 from observatorio.consultas import buscar_ofertas, listar_cursos, oferta_resumen, valores_filtros
-from observatorio.corridas import ErrorCorrida, ejecucion_dict, lanzar, progreso
+from observatorio.cache_respuesta import obtener_o_calcular
 from observatorio.db.modelos import Ejecucion, Oferta, Usuario, Validacion, ahora
-from observatorio.exportar import COLUMNAS, a_csv, a_excel, filas
-from observatorio.orquestador import normalizar_corte, normalizar_semestre
+from observatorio.normas_corrida import normalizar_corte, normalizar_semestre
 
 router = APIRouter()
 META_VALIDACION = 90.0
+_DASHBOARD_TTL = 180
+_HEADERS_DASHBOARD = {"Cache-Control": "private, max-age=180"}
 
 
 def _corte(c: str | None) -> str | None:
@@ -37,20 +38,28 @@ class LanzarIn(BaseModel):
 
 @router.post("/corridas")
 def lanzar_corrida(d: LanzarIn, u: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
+    from observatorio.corridas import ErrorCorrida, lanzar
+
     try:
         e = lanzar(s, d.semestre, d.corte, u.email, d.modo)
     except (ErrorCorrida, ValueError) as ex:
         raise HTTPException(400, str(ex)) from ex
+    from observatorio.corridas import ejecucion_dict
+
     return ejecucion_dict(e)
 
 
 @router.get("/corridas")
 def listar_corridas(_: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
+    from observatorio.corridas import ejecucion_dict
+
     return [ejecucion_dict(e) for e in s.scalars(select(Ejecucion).order_by(Ejecucion.creado_en.desc()).limit(100))]
 
 
 @router.get("/corridas/{id_ejecucion}")
 def ver_corrida(id_ejecucion: str, _: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
+    from observatorio.corridas import ejecucion_dict, progreso
+
     e = s.get(Ejecucion, id_ejecucion)
     if e is None:
         raise HTTPException(404, "Ejecución no encontrada")
@@ -103,23 +112,49 @@ def comparar(semestre_a: str, corte_a: str, semestre_b: str, corte_b: str, carre
     return analisis.comparar(s, semestre_a, normalizar_corte(corte_a), semestre_b, normalizar_corte(corte_b), carrera)
 
 
-@router.get("/dashboard")
-def dashboard(u: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
-    cs = analisis.cortes_disponibles(s)
+def _armar_dashboard(s: Session, rol: str) -> dict:
+    from observatorio.corridas import ejecucion_dict
+
+    cs = obtener_o_calcular("cortes_disponibles", _DASHBOARD_TTL, lambda: analisis.cortes_disponibles(s))
     ultimo = cs[-1] if cs else None
     ultimas = []
-    if u.rol == "admin":
+    if rol == "admin":
         ultimas = [ejecucion_dict(e) for e in s.scalars(select(Ejecucion).order_by(Ejecucion.creado_en.desc()).limit(5))]
-    return {"cortes": cs, "ultimo_corte": ultimo,
-            "resumen": analisis.resumen_corte(s, ultimo["semestre"], ultimo["corte"]) if ultimo else None,
-            "total_historico": s.scalar(select(func.count()).select_from(Oferta)) or 0,
-            "ultimas_corridas": ultimas}
+    total_hist = obtener_o_calcular(
+        "total_historico_ofertas",
+        _DASHBOARD_TTL,
+        lambda: s.scalar(select(func.count()).select_from(Oferta)) or 0,
+    )
+    resumen = None
+    if ultimo:
+        clave = f"resumen:{ultimo['semestre']}:{ultimo['corte']}"
+        resumen = obtener_o_calcular(
+            clave,
+            _DASHBOARD_TTL,
+            lambda: analisis.resumen_corte(s, ultimo["semestre"], ultimo["corte"], para_dashboard=True),
+        )
+    return {
+        "cortes": cs,
+        "ultimo_corte": ultimo,
+        "resumen": resumen,
+        "total_historico": total_hist,
+        "ultimas_corridas": ultimas,
+    }
+
+
+@router.get("/dashboard")
+def dashboard(u: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
+    clave = f"dashboard:{u.rol}"
+    payload = obtener_o_calcular(clave, _DASHBOARD_TTL, lambda: _armar_dashboard(s, u.rol))
+    return JSONResponse(payload, headers=_HEADERS_DASHBOARD)
 
 
 # ----------------------------------------------------------------- exportación (RF-11)
 @router.get("/exportar/csv")
 def exportar_csv(tabla: str, semestre: str | None = None, corte: str | None = None, descripcion: bool = True,
                  _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
+    from observatorio.exportar import COLUMNAS, a_csv, filas
+
     if tabla not in COLUMNAS:
         raise HTTPException(400, f"Tabla no válida. Opciones: {', '.join(COLUMNAS)}")
     nombre = f"{tabla}_{semestre or 'todo'}_{(corte or 'todos').lower()}.csv"
@@ -131,6 +166,8 @@ def exportar_csv(tabla: str, semestre: str | None = None, corte: str | None = No
 @router.get("/exportar/excel")
 def exportar_excel(semestre: str | None = None, corte: str | None = None, descripcion: bool = True,
                    _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
+    from observatorio.exportar import a_excel
+
     datos = a_excel(s, semestre, _corte(corte), incluir_descripcion=descripcion)
     nombre = f"observatorio_{semestre or 'historico'}_{(corte or 'todos').lower()}.xlsx"
     return Response(datos, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -148,6 +185,8 @@ def csv_publico(tabla: str, semestre: str | None = None, corte: str | None = Non
         raise HTTPException(401, "Token de CSV no válido")
     if tabla not in ("ofertas", "oferta_software", "oferta_carrera", "catalogo", "ejecuciones", "cursos"):
         raise HTTPException(404, "Tabla no disponible")
+    from observatorio.exportar import a_csv, filas
+
     datos = filas(s, tabla, semestre, _corte(corte), incluir_descripcion=descripcion, desde=(pagina - 1) * tamano, limite=tamano)
     return Response("".join(a_csv(tabla, datos)), media_type="text/csv; charset=utf-8",
                              headers={"Cache-Control": "public, max-age=300"})

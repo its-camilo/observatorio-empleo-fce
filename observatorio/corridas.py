@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from observatorio.config import ajustes
 from observatorio.db.modelos import Ejecucion, OfertaCruda, Particion, ahora
-from observatorio.orquestador import NOMBRES_FUENTE, normalizar_corte, normalizar_semestre
+from observatorio.normas_corrida import NOMBRES_FUENTE, normalizar_corte, normalizar_semestre
 
 API = "https://api.github.com"
 

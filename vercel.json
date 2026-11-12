@@ -3,6 +3,8 @@
   "installCommand": "cd web && npm ci",
   "buildCommand": "cd web && npm run build",
   "outputDirectory": "web/dist",
+  "regions": ["iad1"],
+  "fluid": true,
   "functions": {
     "api/index.py": {
       "maxDuration": 60,
