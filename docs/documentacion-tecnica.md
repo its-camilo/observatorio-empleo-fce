@@ -105,7 +105,7 @@ mín(palabras débiles, 3) + 1 si el término de búsqueda es de esa carrera (`c
 - Título con palabra específica de una carrera → relevante (principal = mayor puntaje; secundarias con palabra en el título o puntaje ≥ 3; máx. 5).
 - Título en `exclusion_titulo` sin palabra específica (jefe/coordinador/gerente no cuentan) → no relevante.
 - Sin señales → no relevante. Solo descripción/término → **dudosa** → LLM.
-- LLM (`pipeline/llm.py`): OpenRouter, modelos `:free` con lista de respaldo, lotes de 20, JSON, caché por hash, tope diario
+- LLM (`pipeline/llm.py`): OpenRouter modelo fijo `openrouter/free`, ~12 req/min por defecto, reintentos 429, circuit breaker, caché por hash
   (1 000) y por corrida (600), 16 solicitudes/min, espera ante 429. Sin clave o sin cupo → **respaldo**: relevante si puntaje ≥ 3.
   El reporte muestra cuántas se clasificaron con LLM y cuántas por respaldo.
 

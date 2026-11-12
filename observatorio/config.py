@@ -17,14 +17,9 @@ except Exception:  # pragma: no cover
     pass
 
 
-MODELOS_OPENROUTER_POR_DEFECTO = [
-    "openrouter/free",
-    "google/gemma-4-31b-it:free",
-    "google/gemma-4-26b-a4b-it:free",
-    "baidu/ernie-5.5-flash-preview:free",
-    "liquid/lfm-3-1.7b:free",
-    "nvidia/nemotron-3.5-super-vl:free",
-]
+# Único endpoint grativo documentado por OpenRouter para clasificación.
+# https://openrouter.ai/openrouter/free
+MODELO_OPENROUTER_GRATIS = "openrouter/free"
 
 
 def _lista(valor: str) -> list[str]:
@@ -54,7 +49,6 @@ def normalizar_url_bd(url: str) -> str:
 class Ajustes:
     database_url: str = ""
     openrouter_api_key: str = ""
-    openrouter_modelos: list[str] = field(default_factory=list)
     google_client_id: str = ""
     dominio_permitido: str = "unal.edu.co"
     admins_iniciales: list[str] = field(default_factory=list)
@@ -74,7 +68,6 @@ def ajustes() -> Ajustes:
     return Ajustes(
         database_url=normalizar_url_bd(os.getenv("DATABASE_URL", "")),
         openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
-        openrouter_modelos=_lista(os.getenv("OPENROUTER_MODELS", "")) or list(MODELOS_OPENROUTER_POR_DEFECTO),
         google_client_id=os.getenv("GOOGLE_CLIENT_ID", ""),
         dominio_permitido=os.getenv("DOMINIO_PERMITIDO", "unal.edu.co").lstrip("@").lower(),
         admins_iniciales=[e.lower() for e in _lista(
