@@ -59,10 +59,15 @@ POR_DEFECTO: dict[str, dict[str, Any]] = {
     },
     "llm": {
         "valor": {
-            "habilitado": True, "tamano_lote": 20, "max_solicitudes_dia": 1000, "solicitudes_por_minuto": 16,
-            "max_solicitudes_corrida": 600, "modelos": [],
+            "habilitado": True,
+            "tamano_lote": 20,
+            "max_solicitudes_dia": 50,
+            "solicitudes_por_minuto": 12,
+            "max_solicitudes_corrida": 600,
         },
-        "descripcion": "Clasificación con modelos gratuitos de OpenRouter solo para ofertas dudosas. modelos vacío = lista por defecto u OPENROUTER_MODELS.",
+        "descripcion": "Clasificación con OpenRouter solo para ofertas dudosas. Modelo fijo openrouter/free "
+                       "(tier gratuito ~20 req/min; cupo diario según créditos OpenRouter, p. ej. 50–1000/día). "
+                       "solicitudes_por_minuto conservador (12) para evitar 429.",
     },
     "reglas_carrera": {
         "valor": {

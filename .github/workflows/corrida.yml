@@ -47,7 +47,6 @@ concurrency:
 env:
   DATABASE_URL: ${{ secrets.DATABASE_URL }}
   OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-  OPENROUTER_MODELS: ${{ vars.OPENROUTER_MODELS }}
   PROXIES: ${{ secrets.PROXIES }}
   PYTHONUNBUFFERED: "1"
 
