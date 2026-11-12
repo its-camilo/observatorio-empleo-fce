@@ -1,0 +1,53 @@
+name: Mantener activo (salud + BD)
+
+# Ping liviano a la API en Vercel para amortiguar cold start de la función y de Neon (scale-to-zero).
+# Horario: lunes a viernes, 7:00–20:00 hora de Bogotá (UTC-5).
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 7:00–18:55 Bogotá = 12:00–23:55 UTC, lunes a viernes
+    - cron: "*/5 12-23 * * 1-5"
+    # 19:00–19:55 Bogotá cae en 00:00–00:55 UTC del día siguiente (UTC)
+    - cron: "*/5 0 * * 2-6"
+    # 20:00 Bogotá = 01:00 UTC del día siguiente; un solo ping a esa hora
+    - cron: "0 1 * * 2-6"
+
+concurrency:
+  group: observatorio-keepalive
+  cancel-in-progress: false
+
+env:
+  URL_APP: ${{ vars.URL_APP }}
+
+jobs:
+  ping:
+    name: GET /api/salud?db=1
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Comprobar salud (con reintento)
+        run: |
+          set +e
+          BASE="${URL_APP:-https://observatorio-empleo-fce.vercel.app}"
+          URL_SALUD="${BASE%/}/api/salud?db=1"
+          intentar() {
+            curl -fsS --connect-timeout 10 --max-time 25 \
+              -H "Accept: application/json" \
+              "$URL_SALUD"
+          }
+          echo "=== $URL_SALUD ==="
+          if salida="$(intentar)"; then
+            echo "$salida"
+            echo "OK en el primer intento"
+            exit 0
+          fi
+          echo "::warning::Primer intento falló (timeout o HTTP). Reintentando una vez…"
+          sleep 3
+          if salida="$(intentar)"; then
+            echo "$salida"
+            echo "::warning::Respondió en el segundo intento (hubo un fallo transitorio)"
+            exit 0
+          fi
+          echo "::warning::No hubo respuesta válida tras dos intentos; no se marca el workflow como fallido"
+          exit 0

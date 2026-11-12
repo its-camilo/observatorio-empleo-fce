@@ -1,23 +1,25 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { Suspense, createContext, lazy, useContext, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useNavigate } from "react-router-dom";
 import "./index.css";
 import { guardarSesion, leerSesion, Sesion } from "./api";
+import { Cargando } from "./componentes/ui";
 import Login from "./paginas/Login";
-import Dashboard from "./paginas/Dashboard";
-import LanzarCorrida from "./paginas/LanzarCorrida";
-import Ejecuciones from "./paginas/Ejecuciones";
-import Ofertas from "./paginas/Ofertas";
-import Rankings from "./paginas/Rankings";
-import Catalogo from "./paginas/Catalogo";
-import Terminos from "./paginas/Terminos";
-import NoCatalogados from "./paginas/NoCatalogados";
-import Validacion from "./paginas/Validacion";
-import Usuarios from "./paginas/Usuarios";
-import Cursos from "./paginas/Cursos";
-import Configuracion from "./paginas/Configuracion";
-import TokensMcp from "./paginas/TokensMcp";
 import LogoUnal from "./componentes/LogoUnal";
+
+const Dashboard = lazy(() => import("./paginas/Dashboard"));
+const LanzarCorrida = lazy(() => import("./paginas/LanzarCorrida"));
+const Ejecuciones = lazy(() => import("./paginas/Ejecuciones"));
+const Ofertas = lazy(() => import("./paginas/Ofertas"));
+const Rankings = lazy(() => import("./paginas/Rankings"));
+const Catalogo = lazy(() => import("./paginas/Catalogo"));
+const Terminos = lazy(() => import("./paginas/Terminos"));
+const NoCatalogados = lazy(() => import("./paginas/NoCatalogados"));
+const Validacion = lazy(() => import("./paginas/Validacion"));
+const Usuarios = lazy(() => import("./paginas/Usuarios"));
+const Cursos = lazy(() => import("./paginas/Cursos"));
+const Configuracion = lazy(() => import("./paginas/Configuracion"));
+const TokensMcp = lazy(() => import("./paginas/TokensMcp"));
 
 type Ctx = { sesion: Sesion | null; setSesion: (s: Sesion | null) => void };
 const SesionCtx = createContext<Ctx>({ sesion: null, setSesion: () => {} });
@@ -114,7 +116,9 @@ function Marco() {
                 {abierto ? "Cerrar" : "Abrir"}
               </button>
             </div>
-            <Outlet />
+            <Suspense fallback={<Cargando />}>
+              <Outlet />
+            </Suspense>
           </main>
         </div>
       </div>

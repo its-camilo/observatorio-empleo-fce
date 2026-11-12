@@ -1,4 +1,5 @@
-# Dependencias de la API. Vercel instala las de pyproject.toml: mantener ambas listas iguales.
+# Dependencias de la API (sin scraping: jobspy/pandas/lxml están en requirements-scraper.txt).
+# Vercel instala las de pyproject.toml: mantener ambas listas iguales.
 fastapi>=0.115,<1
 sqlalchemy>=2.0,<3
 psycopg2-binary>=2.9

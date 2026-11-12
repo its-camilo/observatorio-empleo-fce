@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Aviso, Barras, Cargando, EstadoChip, Kpi, Titulo, useDatos } from "../componentes/ui";
+import { Aviso, Barras, EstadoChip, EsqueletoKpi, EsqueletoTarjeta, Kpi, Titulo, useDatos } from "../componentes/ui";
 import { useEsAdmin } from "../main";
 import { Ejecucion } from "./Ejecuciones";
 
@@ -21,13 +21,28 @@ const aBarras = (o: Record<string, number>) => Object.entries(o).map(([etiqueta,
 
 export default function Dashboard() {
   const admin = useEsAdmin();
-  const { datos, error } = useDatos<Datos>("/dashboard");
+  const { datos, error, cargando } = useDatos<Datos>("/dashboard");
+  const r = datos?.resumen;
   if (error) return <Aviso tipo="error">{error}</Aviso>;
-  if (!datos) return <Cargando />;
-  const r = datos.resumen;
   return (
     <div>
       <Titulo extra={admin ? <Link className="btn-cta" to="/lanzar">Lanzar corrida</Link> : undefined}>Inicio</Titulo>
+      {cargando && !datos && (
+        <>
+          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <EsqueletoKpi />
+            <EsqueletoKpi />
+            <EsqueletoKpi />
+            <EsqueletoKpi />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <EsqueletoTarjeta alto="h-56" />
+            <EsqueletoTarjeta alto="h-72" />
+          </div>
+        </>
+      )}
+      {!datos ? null : (
+        <>
       {!r && (
         <Aviso>{admin ? "Aún no hay ofertas. Lance la primera corrida desde “Lanzar corrida”." : "Aún no hay ofertas en el observatorio."}</Aviso>
       )}
@@ -68,6 +83,8 @@ export default function Dashboard() {
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
     </div>
   );
