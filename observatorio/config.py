@@ -18,11 +18,12 @@ except Exception:  # pragma: no cover
 
 
 MODELOS_OPENROUTER_POR_DEFECTO = [
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "deepseek/deepseek-chat-v3-0324:free",
-    "google/gemma-3-27b-it:free",
-    "mistralai/mistral-small-3.2-24b-instruct:free",
-    "qwen/qwen3-235b-a22b:free",
+    "openrouter/free",
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "baidu/ernie-5.5-flash-preview:free",
+    "liquid/lfm-3-1.7b:free",
+    "nvidia/nemotron-3.5-super-vl:free",
 ]
 
 

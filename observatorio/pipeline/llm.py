@@ -21,6 +21,7 @@ import requests
 from sqlalchemy.orm import Session
 
 from observatorio.config import ajustes
+from observatorio.pipeline.openrouter_modelos import resolver_modelos
 from observatorio.texto import hash_texto
 
 log = logging.getLogger("observatorio.llm")
@@ -39,23 +40,33 @@ Responde SOLO con JSON con esta forma exacta:
 
 
 class ClienteLLM:
-    def __init__(self, s: Session, cfg_llm: dict, carreras: list[str]):
+    def __init__(self, s: Session, cfg_llm: dict, carreras: list[str], id_corrida: str | None = None):
         a = ajustes()
         self.s = s
         self.api_key = a.openrouter_api_key
-        self.modelos = cfg_llm.get("modelos") or a.openrouter_modelos
+        cfg_lista = cfg_llm.get("modelos")
+        preferidos = [m for m in cfg_lista if m] if isinstance(cfg_lista, list) and cfg_lista else a.openrouter_modelos
+        self.modelos = resolver_modelos(preferidos=preferidos, api_key=self.api_key, id_corrida=id_corrida)
+        self.modelos_preferidos = preferidos
         self.tamano_lote = int(cfg_llm.get("tamano_lote", 20))
         self.max_dia = int(cfg_llm.get("max_solicitudes_dia", 1000))
         self.max_corrida = int(cfg_llm.get("max_solicitudes_corrida", 600))
         self.intervalo = 60.0 / max(1, int(cfg_llm.get("solicitudes_por_minuto", 16)))
-        self.habilitado = bool(cfg_llm.get("habilitado", True)) and bool(self.api_key)
+        base_habilitado = bool(cfg_llm.get("habilitado", True)) and bool(self.api_key)
+        self.habilitado = base_habilitado and bool(self.modelos)
         self.carreras = carreras
         self.solicitudes = 0
         self.errores = 0
         self.desde_cache = 0
         self._ultima = 0.0
-        self.motivo_inactivo = "" if self.habilitado else (
-            "sin OPENROUTER_API_KEY" if not self.api_key else "desactivado en configuración")
+        if not self.api_key:
+            self.motivo_inactivo = "sin OPENROUTER_API_KEY"
+        elif not base_habilitado:
+            self.motivo_inactivo = "desactivado en configuración"
+        elif not self.modelos:
+            self.motivo_inactivo = "ningún modelo gratuito disponible en OpenRouter"
+        else:
+            self.motivo_inactivo = ""
 
     # ------------------------------------------------------------------ cupo
     def _uso_hoy(self) -> int:
@@ -101,6 +112,8 @@ class ClienteLLM:
 
     # ------------------------------------------------------------------ API
     def _llamar(self, mensajes: list[dict]) -> tuple[dict | None, str]:
+        if not self.modelos:
+            return None, ""
         for modelo in self.modelos:
             for intento in range(3):
                 espera = self.intervalo - (time.time() - self._ultima)
@@ -193,8 +206,16 @@ class ClienteLLM:
         return salida
 
     def resumen(self) -> dict:
-        return {"habilitado": self.habilitado, "motivo_inactivo": self.motivo_inactivo, "solicitudes": self.solicitudes,
-                "desde_cache": self.desde_cache, "errores": self.errores, "uso_hoy": self._uso_hoy() if self.api_key else 0}
+        return {
+            "habilitado": self.habilitado,
+            "motivo_inactivo": self.motivo_inactivo,
+            "solicitudes": self.solicitudes,
+            "desde_cache": self.desde_cache,
+            "errores": self.errores,
+            "uso_hoy": self._uso_hoy() if self.api_key else 0,
+            "modelos": self.modelos[:10],
+            "modelos_total": len(self.modelos),
+        }
 
 
 def _parsear_json(texto: str) -> dict:
