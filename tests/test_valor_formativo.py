@@ -47,4 +47,15 @@ def test_auxiliar_administrativo_y_contable_excluido():
 def test_asesor_comercial_excluido_analista_no():
     patrones = valores_por_defecto()["exclusion_operativa_titulo"]
     assert titulo_excluido_operativo("Asesor comercial", patrones)
+    assert titulo_excluido_operativo("asesor/a comercial", patrones)
     assert not titulo_excluido_operativo("Analista comercial", patrones)
+
+
+def test_analista_crm_en_titulo(detector):
+    ok, motivo = oferta_tiene_valor_formativo("Analista CRM y automatización", "", detector)
+    assert ok and motivo == "habilidad_tecnica"
+
+
+def test_analista_logistica_en_titulo(detector):
+    ok, _ = oferta_tiene_valor_formativo("Analista de Operaciones Logísticas", "", detector)
+    assert ok

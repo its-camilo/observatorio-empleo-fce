@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import re
 
+from observatorio.pipeline.clasificacion import titulo_es_cargo_profesional
 from observatorio.pipeline.software import Deteccion, DetectorSoftware
-from observatorio.texto import plegar
+from observatorio.texto import limpiar_espacios, plegar
 
 # Software del catálogo que, por sí solo, no justifica un curso (Office básico).
 SOFTWARE_GENERICO_OFFICE = frozenset(
@@ -38,20 +39,38 @@ _HABILIDADES_CURSABLES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
         (r"\b(?:macros?|vba)\b", "vba/macros"),
         (r"power\s*bi|\bpbi\b", "power bi"),
         (r"power\s*query|\bdax\b", "power query/dax"),
-        (r"\bsap\b|s/4hana|sap\s+fi", "sap"),
-        (r"\bsql\b|consultas\s+sql", "sql"),
+        (r"power\s+automate|microsoft\s+power\s+automate", "power automate"),
+        (r"\bsap\b|s/4hana|sap\s+fi|sap\s+co|sap\s+mm", "sap"),
+        (r"\berp\b|dynamics\s+365|microsoft\s+dynamics", "erp"),
+        (r"\bcrm\b|salesforce|hubspot|dynamics\s+crm", "crm"),
+        (r"\bsql\b|consultas\s+sql|bases?\s+de\s+datos", "sql"),
         (r"\bpython\b|pandas|numpy\b", "python/datos"),
-        (r"\br\b(?=\s*(?:studio|program|lenguaje|stat|analisis))|rstudio", "r estadístico"),
-        (r"\btableau\b", "tableau"),
+        (r"\br\b(?=\s*(?:studio|program|lenguaje|stat|analisis))|rstudio|\blenguaje\s+r\b", "r estadístico"),
+        (r"\bstata\b", "stata"),
+        (r"\bspss\b", "spss"),
+        (r"\btableau\b|\bqlik\b|\blooker\b", "tableau/bi"),
         (r"\bniif\b|\bifrs\b|normas?\s+internacionales?\s+de\s+informacion\s+financiera", "niif"),
-        (r"contabilidad\s+tributaria|tributacion\s+con|dian\b|facturacion\s+electronica", "contabilidad tributaria"),
-        (r"analisis\s+de\s+datos|data\s+analytics|business\s+intelligence", "análisis de datos"),
-        (r"modelacion\s+financiera|modelos?\s+financieros?", "modelación financiera"),
+        (r"contabilidad\s+tributaria|tributari|tributacion|dian\b|facturacion\s+electronica", "contabilidad tributaria"),
+        (r"presupuesto|presupuestos|planeacion\s+financiera", "presupuesto"),
+        (r"analisis\s+de\s+datos|data\s+analytics|business\s+intelligence|big\s+data", "análisis de datos"),
+        (r"modelacion\s+financiera|modelos?\s+financieros?|valuation|valoracion", "modelación financiera"),
         (r"auditoria\s+interna|control\s+interno", "auditoría/control"),
         (r"estadistica\s+(?:aplicada|avanzada)|econometria", "estadística/econometría"),
         (r"\bsas\b(?!\s*\.?\s*a\.?\s*s\.?)", "sas"),
         (r"quickbooks|siigo|helisa|world\s*office|contaplus", "software contable"),
+        (r"marketing\s+digital|google\s+ads|meta\s+ads|facebook\s+ads|seo\b|sem\b|google\s+analytics", "marketing digital"),
+        (r"\bwms\b|gestion\s+de\s+inventarios?|software\s+de\s+inventario|sistema\s+de\s+inventario", "logística/inventarios"),
+        (r"logistica|cadena\s+de\s+suministro|supply\s+chain", "logística"),
+        (r"nomina|nómina|payroll|software\s+de\s+nomina", "nómina"),
+        (r"\bingles\s+(?:certificado|avanzado|bilingue|b2|c1)|toefl|ielts", "inglés certificado"),
+        (r"lean\s+six\s+sigma|six\s+sigma|\blean\b", "lean/six sigma"),
+        (r"\bpmp\b|project\s+management\s+professional|scrum\s+master|\bscrum\b|agile\s+project", "gestión de proyectos"),
+        (r"\brpa\b|automatizacion|automation|robotic\s+process", "automatización/rpa"),
         (r"chatgpt|inteligencia\s+artificial\s+aplicada", "ia aplicada"),
+        (r"analista\s+de\s+inventarios?|gestion\s+de\s+inventarios?", "inventarios"),
+        (r"mercad(?:eo|o)\s+y\s+desarrollo|desarrollo\s+de\s+proyectos", "mercadeo/proyectos"),
+        (r"talento\s+humano|recursos\s+humanos|\brrhh\b", "talento humano"),
+        (r"\bcompras\b|comercial\s+y\s+de\s+compras", "compras/comercial"),
     )
 )
 
@@ -61,6 +80,13 @@ _BASICO_OFFICE = re.compile(
     r"manejo\s+de\s+(?:word|power\s*point)(?:\s+y\s+excel)?",
     re.I,
 )
+
+_MIN_DESCRIPCION_PURGA = 30
+
+
+def tiene_descripcion_util(descripcion: str | None, *, minimo: int = _MIN_DESCRIPCION_PURGA) -> bool:
+    """Texto de descripción guardado en `ofertas.descripcion` con longitud útil para evaluar software/habilidades."""
+    return len(limpiar_espacios(descripcion or "")) >= minimo
 
 
 def detectar_habilidades_tecnicas(texto: str) -> list[str]:
@@ -112,6 +138,11 @@ def oferta_tiene_valor_formativo(
         detectados = []
 
     habs = detectar_habilidades_tecnicas(texto)
+    if titulo_es_cargo_profesional(cargo or ""):
+        # Excel genérico en cargos profesionales (p. ej. analista) sí cuenta si no es solo «Office básico».
+        if re.search(r"\bexcel\b", plegar(texto)) and not _BASICO_OFFICE.search(plegar(descripcion or "")):
+            if "excel" not in habs and "excel avanzado" not in habs:
+                habs.append("excel (rol profesional)")
     if habilidades_llm:
         for h in habilidades_llm:
             if h and h.strip():

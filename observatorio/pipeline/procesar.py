@@ -18,7 +18,7 @@ from observatorio.pipeline.limpieza import normalizar_cruda
 from observatorio.pipeline.llm import ClienteLLM
 from observatorio.pipeline.no_catalogados import contar_no_catalogados
 from observatorio.pipeline.software import DetectorSoftware
-from observatorio.pipeline.valor_formativo import oferta_tiene_valor_formativo
+from observatorio.pipeline.valor_formativo import oferta_tiene_valor_formativo, tiene_descripcion_util
 from observatorio.texto import es_colombia, normalizar_clave
 
 log = logging.getLogger("observatorio.procesar")
@@ -211,7 +211,7 @@ class Procesador:
             if c.estado != "relevante" or not c.carreras:
                 r.no_relevantes += 1
                 continue
-            if self.requiere_formativo and c.clasificado_por != "llm":
+            if self.requiere_formativo and c.clasificado_por != "llm" and tiene_descripcion_util(u.get("descripcion")):
                 ok, _ = oferta_tiene_valor_formativo(
                     u["cargo"],
                     u.get("descripcion") or "",
