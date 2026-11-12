@@ -346,6 +346,24 @@ def total_corte(s: Session, semestre: str, corte: str) -> int:
     return s.scalar(select(func.count()).select_from(Oferta).where(Oferta.semestre == semestre, Oferta.corte == corte)) or 0
 
 
+def cerrar_corrida_workflow(
+    s: Session,
+    id_ejecucion: str,
+    mensaje: str,
+    *,
+    conclusion_github: str | None = None,
+) -> Ejecucion:
+    """Cierra en BD una corrida cuyo workflow de GitHub falló o se interrumpió."""
+    from observatorio.corridas_cierre import cerrar_ejecucion_error
+
+    ejec = s.get(Ejecucion, id_ejecucion)
+    if ejec is None:
+        raise ValueError(f"No existe la ejecución {id_ejecucion}")
+    if cerrar_ejecucion_error(s, ejec, mensaje, conclusion_github=conclusion_github):
+        s.commit()
+    return ejec
+
+
 def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mini: bool = True) -> Ejecucion:
     from observatorio.pipeline.procesar import Procesador
 
@@ -357,47 +375,57 @@ def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mi
     commit_extraccion(s)
     proc = Procesador(s, ejec, cfg, usar_llm=usar_llm)
     try:
-        proc.procesar_pendientes()
-    except Exception:
+        try:
+            proc.procesar_pendientes()
+        except Exception:
+            asegurar_sesion_activa(s)
+            raise
+
+        # Mini corrida automática si no se llegó a la meta
+        mini_cfg = cfg.get("mini_corrida") or {}
+        total = total_corte(s, ejec.semestre, ejec.corte)
+        objetivo = objetivo_ofertas_corrida(cfg, ejec.parametros)
+        crudas = contar_crudas_ejecucion(s, id_ejecucion)
+        puede_mini = objetivo <= 0 or crudas >= objetivo
+        if permitir_mini and puede_mini and ejec.modo == "completa" and mini_cfg.get("habilitada") and not ejec.mini_corrida \
+                and total < (ejec.meta_ofertas or 0):
+            log.info("Hay %d ofertas relevantes en el corte (meta %s): se inicia la mini corrida con términos ampliados",
+                     total, ejec.meta_ofertas)
+            ejec.mini_corrida = True
+            ejec.fase = "mini_corrida"
+            terminos = list(s.scalars(select(TerminoBusqueda).where(TerminoBusqueda.activo.is_(True), TerminoBusqueda.tipo == "ampliado")))
+            fuentes = fuentes_para_corrida(cfg, mini_cfg.get("fuentes", ["linkedin", "indeed", "computrabajo"]))
+            crear_particiones(s, ejec, fuentes, terminos, cfg["ubicaciones"], cfg, mini=True)
+            ejec.terminos_usados = sorted(set(ejec.terminos_usados or []) | {f"{t.carrera}: {t.termino} (ampliado)" for t in terminos})
+            s.commit()
+            presupuesto = float(mini_cfg.get("max_minutos", 240))
+            t0 = time.time()
+            for f in fuentes:
+                restante = presupuesto - (time.time() - t0) / 60
+                if restante <= 1:
+                    break
+                try:
+                    extraer(s, id_ejecucion, f, max_minutos=restante / max(1, len(fuentes) - fuentes.index(f)), solo_mini=True)
+                except Exception as e:  # noqa: BLE001
+                    log.warning("Mini corrida en %s falló: %s", f, e)
+                    asegurar_sesion_activa(s)
+            ejec.fase = "procesando"
+            s.commit()
+            proc.procesar_pendientes()
+
+        proc.guardar_no_catalogados()
+        finalizar(s, ejec, proc)
+        s.commit()
+        return ejec
+    except Exception as e:
         asegurar_sesion_activa(s)
+        cerrar_corrida_workflow(
+            s,
+            id_ejecucion,
+            f"Consolidación interrumpida: {explicar_error('consolidar', e)}",
+            conclusion_github="failure",
+        )
         raise
-
-    # Mini corrida automática si no se llegó a la meta
-    mini_cfg = cfg.get("mini_corrida") or {}
-    total = total_corte(s, ejec.semestre, ejec.corte)
-    objetivo = objetivo_ofertas_corrida(cfg, ejec.parametros)
-    crudas = contar_crudas_ejecucion(s, id_ejecucion)
-    puede_mini = objetivo <= 0 or crudas >= objetivo
-    if permitir_mini and puede_mini and ejec.modo == "completa" and mini_cfg.get("habilitada") and not ejec.mini_corrida \
-            and total < (ejec.meta_ofertas or 0):
-        log.info("Hay %d ofertas relevantes en el corte (meta %s): se inicia la mini corrida con términos ampliados",
-                 total, ejec.meta_ofertas)
-        ejec.mini_corrida = True
-        ejec.fase = "mini_corrida"
-        terminos = list(s.scalars(select(TerminoBusqueda).where(TerminoBusqueda.activo.is_(True), TerminoBusqueda.tipo == "ampliado")))
-        fuentes = fuentes_para_corrida(cfg, mini_cfg.get("fuentes", ["linkedin", "indeed", "computrabajo"]))
-        crear_particiones(s, ejec, fuentes, terminos, cfg["ubicaciones"], cfg, mini=True)
-        ejec.terminos_usados = sorted(set(ejec.terminos_usados or []) | {f"{t.carrera}: {t.termino} (ampliado)" for t in terminos})
-        s.commit()
-        presupuesto = float(mini_cfg.get("max_minutos", 240))
-        t0 = time.time()
-        for f in fuentes:
-            restante = presupuesto - (time.time() - t0) / 60
-            if restante <= 1:
-                break
-            try:
-                extraer(s, id_ejecucion, f, max_minutos=restante / max(1, len(fuentes) - fuentes.index(f)), solo_mini=True)
-            except Exception as e:  # noqa: BLE001
-                log.warning("Mini corrida en %s falló: %s", f, e)
-                asegurar_sesion_activa(s)
-        ejec.fase = "procesando"
-        s.commit()
-        proc.procesar_pendientes()
-
-    proc.guardar_no_catalogados()
-    finalizar(s, ejec, proc)
-    s.commit()
-    return ejec
 
 
 def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:

@@ -51,9 +51,13 @@ def lanzar_corrida(d: LanzarIn, u: Usuario = Depends(solo_admin), s: Session = D
 
 @router.get("/corridas")
 def listar_corridas(_: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
-    from observatorio.corridas import ejecucion_dict
+    from observatorio.corridas import ejecucion_dict, reconciliar_corridas_activas
 
-    return [ejecucion_dict(e) for e in s.scalars(select(Ejecucion).order_by(Ejecucion.creado_en.desc()).limit(100))]
+    filas = list(s.scalars(select(Ejecucion).order_by(Ejecucion.creado_en.desc()).limit(100)))
+    if reconciliar_corridas_activas(s, consultar_github=True):
+        s.commit()
+        filas = list(s.scalars(select(Ejecucion).order_by(Ejecucion.creado_en.desc()).limit(100)))
+    return [ejecucion_dict(e) for e in filas]
 
 
 @router.get("/corridas/{id_ejecucion}")

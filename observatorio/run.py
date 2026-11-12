@@ -26,11 +26,11 @@ import sys
 
 ACCIONES = (
     "completa", "preparar", "extraer", "extraer-secuencial", "cursos", "consolidar", "reporte", "exportar",
-    "migrar", "semilla", "purga-operativa", "purga-reglas",
+    "migrar", "semilla", "purga-operativa", "purga-reglas", "cerrar-corrida", "cerrar-colgadas",
 )
 
 # Comandos de mantenimiento / export que no requieren id de ejecución de corrida.
-ACCIONES_SIN_RUN_ID = frozenset({"exportar", "purga-operativa", "purga-reglas"})
+ACCIONES_SIN_RUN_ID = frozenset({"exportar", "purga-operativa", "purga-reglas", "cerrar-colgadas"})
 
 
 def configurar_logs() -> None:
@@ -120,6 +120,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--salida", default="observatorio.xlsx")
     p.add_argument("--github-output", help="Archivo donde escribir la matriz (GitHub Actions)")
     p.add_argument("--aplicar", action="store_true", help="Con purga-operativa/purga-reglas: aplica cambios (sin esto solo vista previa)")
+    p.add_argument("--motivo", help="Motivo del cierre (cerrar-corrida)")
+    p.add_argument("--conclusion", help="Conclusión de GitHub (failure, cancelled, timed_out)")
+    p.add_argument("--ids", help="Ids de ejecución separados por comas (cerrar-colgadas)")
+    p.add_argument("--forzar", action="store_true", help="Con cerrar-colgadas: cierra los --ids sin esperar umbral de horas")
     a = p.parse_args(argv)
 
     if a.accion == "migrar":
@@ -186,8 +190,23 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(orq.extraer_cursos_corrida(s, a.run_id, max_por_termino=lim), ensure_ascii=False))
             return 0
         if a.accion == "consolidar":
-            e = orq.consolidar(s, a.run_id, usar_llm=not a.sin_llm)
+            try:
+                e = orq.consolidar(s, a.run_id, usar_llm=not a.sin_llm)
+            except Exception:
+                return 1
             imprimir_reporte(e)
+            return 0 if e.estado in ("completada", "incompleta") else 1
+        if a.accion == "cerrar-corrida":
+            motivo = a.motivo or os.getenv("CORRIDA_CIERRE_MOTIVO") or "Workflow de GitHub Actions terminó con errores."
+            e = orq.cerrar_corrida_workflow(s, a.run_id, motivo, conclusion_github=a.conclusion or os.getenv("CORRIDA_CIERRE_CONCLUSION"))
+            print(json.dumps({"id_ejecucion": e.id_ejecucion, "estado": e.estado, "fase": e.fase}, ensure_ascii=False))
+            return 0
+        if a.accion == "cerrar-colgadas":
+            from observatorio.corridas import cerrar_corridas_colgadas
+
+            ids = [x.strip() for x in a.ids.split(",")] if a.ids else None
+            res = cerrar_corridas_colgadas(s, ids=ids, consultar_github=True, forzar_ids=a.forzar)
+            print(json.dumps(res, ensure_ascii=False))
             return 0
         if a.accion == "reporte":
             e = s.get(Ejecucion, a.run_id)

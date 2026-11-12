@@ -143,3 +143,29 @@ jobs:
           name: observatorio-${{ inputs.semestre }}-${{ inputs.corte }}
           path: "*.xlsx"
           retention-days: 30
+
+  cerrar:
+    name: Cerrar corrida si hubo fallos
+    needs: [preparar, extraer, cursos, consolidar]
+    if: ${{ always() && needs.preparar.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-scraper.txt
+      - run: pip install -r requirements-scraper.txt
+      - name: Registrar cierre en base de datos
+        if: ${{ needs.extraer.result != 'success' || needs.consolidar.result != 'success' }}
+        env:
+          CORRIDA_CIERRE_MOTIVO: >-
+            Workflow interrumpido o con fallos (extraer=${{ needs.extraer.result }},
+            consolidar=${{ needs.consolidar.result }}).
+            Revise los jobs en GitHub Actions.
+          CORRIDA_CIERRE_CONCLUSION: failure
+        run: |
+          python -m observatorio.run cerrar-corrida --run-id "${{ needs.preparar.outputs.run_id }}" \
+            --motivo "$CORRIDA_CIERRE_MOTIVO" --conclusion failure
