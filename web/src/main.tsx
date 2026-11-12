@@ -17,6 +17,7 @@ import Usuarios from "./paginas/Usuarios";
 import Cursos from "./paginas/Cursos";
 import Configuracion from "./paginas/Configuracion";
 import TokensMcp from "./paginas/TokensMcp";
+import LogoUnal from "./componentes/LogoUnal";
 
 type Ctx = { sesion: Sesion | null; setSesion: (s: Sesion | null) => void };
 const SesionCtx = createContext<Ctx>({ sesion: null, setSesion: () => {} });
@@ -51,9 +52,10 @@ function PieInstitucional() {
         href="https://www.unal.edu.co"
         target="_blank"
         rel="noreferrer"
-        className="mt-3 block text-center font-titulo text-xs font-bold uppercase tracking-widest text-white md:mt-0 md:border-l md:border-white/40 md:pl-6 md:text-right"
+        className="mt-3 flex justify-center md:mt-0 md:border-l md:border-white/40 md:pl-6 md:justify-end"
+        aria-label="Universidad Nacional de Colombia (sitio web)"
       >
-        UNAL
+        <LogoUnal variante="oscuro" className="object-center md:object-right" />
       </a>
     </footer>
   );

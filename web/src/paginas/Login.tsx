@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from "react-router-dom";
 import { api, Sesion } from "../api";
 import { useSesion } from "../main";
 import { Aviso } from "../componentes/ui";
+import LogoUnal from "../componentes/LogoUnal";
 
 declare global {
   interface Window {
@@ -71,7 +72,10 @@ export default function Login() {
   return (
     <div className="shell-institucional flex min-h-screen flex-col items-center justify-center">
       <div className="shell-card w-full max-w-lg p-8 text-center md:p-12">
-        <div className="font-titulo text-sm font-extrabold uppercase tracking-widest text-acento">UIFCE · UNAL</div>
+        <div className="flex flex-col items-center gap-2">
+          <LogoUnal variante="claro" className="mx-auto object-center" />
+          <div className="font-titulo text-sm font-extrabold uppercase tracking-widest text-acento">UIFCE</div>
+        </div>
         <h1 className="mt-2 font-titulo text-2xl font-extrabold uppercase leading-tight text-marina md:text-3xl">
           Observatorio de Empleo FCE
         </h1>
