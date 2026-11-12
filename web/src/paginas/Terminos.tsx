@@ -39,7 +39,7 @@ export default function Terminos() {
       )}
       <div className="tarjeta overflow-x-auto">
         <div className="mb-2"><select className="campo" value={filtro} onChange={(e) => setFiltro(e.target.value)}><option value="">Todas las carreras</option>{CARRERAS.map((c) => <option key={c}>{c}</option>)}</select>
-          <span className="ml-2 text-sm text-slate-500">{visibles.length} términos</span></div>
+          <span className="ml-2 text-sm text-texto-suave">{visibles.length} términos</span></div>
         <table className="tabla">
           <thead><tr><th>Término</th><th>Carrera</th><th>Tipo</th><th>Fuentes</th><th>Activo</th><th /></tr></thead>
           <tbody>{visibles.map((t) => (

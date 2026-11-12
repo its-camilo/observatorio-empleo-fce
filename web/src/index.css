@@ -2,15 +2,136 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-primario: #4574b9;
+  --color-primario-oscuro: #042361;
+  --color-acento: #44d3fe;
+  --color-superficie: #fefefe;
+  --color-texto-suave: #525c76;
+  --color-textura: #afc6e4;
+  --radio-tarjeta: 40px;
+  --sombra-suave: 0 8px 30px rgba(4, 35, 97, 0.12);
+}
+
+@layer base {
+  body {
+    @apply bg-institucional text-marina;
+  }
+}
+
+/* Marco institucional + textura halftone en costados */
+.shell-institucional {
+  @apply relative min-h-screen bg-institucional px-3 py-3 md:px-4 md:py-4;
+}
+
+.shell-institucional::before,
+.shell-institucional::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: min(28vw, 220px);
+  pointer-events: none;
+  opacity: 0.55;
+  background-image: radial-gradient(circle, var(--color-textura) 1.2px, transparent 1.3px);
+  background-size: 8px 8px;
+  mask-image: linear-gradient(to center, black, transparent 85%);
+  z-index: 0;
+}
+
+.shell-institucional::before {
+  left: 0;
+  mask-image: linear-gradient(to right, black, transparent 80%);
+}
+
+.shell-institucional::after {
+  right: 0;
+  mask-image: linear-gradient(to left, black, transparent 80%);
+}
+
+.shell-card {
+  @apply relative z-10 mx-auto flex min-h-[calc(100vh-1.5rem)] w-full max-w-contenedor flex-col overflow-hidden rounded-tarjeta bg-superficie shadow-suave md:min-h-[calc(100vh-2rem)];
+}
+
+.pie-institucional {
+  @apply relative z-10 mx-auto mt-3 max-w-contenedor px-4 pb-4 font-pie text-sm italic text-white/95 md:mt-4 md:flex md:items-center md:justify-between md:pb-6;
+}
+
 @layer components {
-  .tarjeta { @apply bg-white rounded-xl border border-slate-200 p-4 shadow-sm; }
-  .btn { @apply inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium bg-unal-oscuro text-white hover:bg-unal disabled:opacity-50; }
-  .btn-sec { @apply inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-50; }
-  .btn-peligro { @apply inline-flex items-center rounded-lg px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50; }
-  .campo { @apply rounded-lg border border-slate-300 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-unal; }
-  .etiqueta { @apply block text-xs font-medium text-slate-600 mb-1; }
-  .tabla { @apply w-full text-sm; }
-  .tabla th { @apply text-left font-semibold text-slate-600 border-b border-slate-200 px-2 py-2 bg-slate-50; }
-  .tabla td { @apply border-b border-slate-100 px-2 py-1.5 align-top; }
-  .chip { @apply inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700 mr-1 mb-1; }
+  .tarjeta {
+    @apply rounded-bloque border border-niebla bg-superficie p-4 shadow-suave;
+  }
+
+  .tarjeta-calida {
+    @apply rounded-bloque border border-marina/20 bg-crema p-4;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-1 rounded-boton bg-marina px-8 py-3.5 text-sm font-bold text-white transition-all duration-200 hover:-translate-y-px hover:bg-acento hover:text-marina disabled:opacity-50;
+  }
+
+  .btn-sec {
+    @apply inline-flex items-center justify-center gap-1 rounded-boton border-2 border-institucional bg-transparent px-6 py-2.5 text-sm font-semibold text-institucional transition-colors duration-200 hover:bg-niebla/40 disabled:opacity-50;
+  }
+
+  .btn-cta {
+    @apply inline-flex items-center justify-center gap-1 rounded-boton bg-destacado px-8 py-3.5 text-sm font-bold text-marina transition-all duration-200 hover:-translate-y-px hover:brightness-105 disabled:opacity-50;
+  }
+
+  .btn-peligro {
+    @apply inline-flex items-center rounded-boton px-3 py-1.5 text-xs font-semibold text-marina underline decoration-acento decoration-2 underline-offset-2 hover:bg-niebla/30;
+  }
+
+  .campo {
+    @apply w-full rounded-2xl border border-niebla bg-white px-3 py-2 text-sm text-marina placeholder:text-texto-suave/70 focus:border-institucional focus:outline-none focus:ring-2 focus:ring-acento/50;
+  }
+
+  .etiqueta {
+    @apply mb-1 block font-titulo text-xs font-bold uppercase tracking-wide text-marina;
+  }
+
+  .tabla {
+    @apply w-full text-sm text-texto-suave;
+  }
+
+  .tabla th {
+    @apply border-b border-niebla bg-niebla/25 px-2 py-2 text-left font-titulo text-xs font-bold uppercase tracking-wide text-marina;
+  }
+
+  .tabla td {
+    @apply border-b border-niebla/50 px-2 py-2 align-top;
+  }
+
+  .chip {
+    @apply mb-1 mr-1 inline-block rounded-boton border border-niebla bg-niebla/20 px-2.5 py-0.5 text-xs font-medium text-marina;
+  }
+
+  .nav-link {
+    @apply block rounded-2xl px-3 py-2 text-sm font-semibold text-white/90 transition-colors duration-200 hover:bg-white/10;
+  }
+
+  .nav-link-activo {
+    @apply bg-white/15 text-white;
+    box-shadow: inset 0 -3px 0 0 theme("colors.acento");
+  }
+
+  .pantalla-enfasis {
+    @apply rounded-2xl border-8 border-crema bg-black px-6 py-4 text-center font-subtitulo text-2xl font-bold text-acento;
+  }
+
+  .titulo-seccion {
+    @apply font-titulo text-xl font-extrabold uppercase tracking-tight text-marina md:text-2xl;
+  }
+
+  .subtitulo-acento {
+    @apply font-subtitulo text-lg font-bold text-acento;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .btn-sec,
+  .btn-cta {
+    transition: none;
+  }
 }

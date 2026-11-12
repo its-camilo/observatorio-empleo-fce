@@ -31,8 +31,8 @@ export function PanelProgreso({ p }: { p: Progreso }) {
         <div className="font-semibold">Progreso · fase: {p.fase || "—"}</div>
         <EstadoChip estado={p.estado} />
       </div>
-      <div className="h-3 w-full rounded bg-slate-100"><div className="h-3 rounded bg-unal" style={{ width: `${p.porcentaje}%` }} /></div>
-      <div className="mt-1 text-xs text-slate-600">
+      <div className="h-3 w-full rounded bg-niebla/30"><div className="h-3 rounded bg-institucional" style={{ width: `${p.porcentaje}%` }} /></div>
+      <div className="mt-1 text-xs text-texto-suave">
         {p.porcentaje} % · consultas {p.consultas.hechas + p.consultas.error}/{p.consultas.total} ({p.consultas.error} con error) ·
         ofertas extraídas {p.ofertas_crudas} · procesadas {p.procesadas}
       </div>
@@ -46,7 +46,7 @@ export function PanelProgreso({ p }: { p: Progreso }) {
         </tbody>
       </table>
       {(p.github_run_url || p.github?.url) && (
-        <a className="mt-2 inline-block text-sm text-unal-oscuro underline" href={p.github_run_url || p.github?.url} target="_blank" rel="noreferrer">
+        <a className="mt-2 inline-block text-sm text-institucional font-semibold underline" href={p.github_run_url || p.github?.url} target="_blank" rel="noreferrer">
           Ver en GitHub Actions
         </a>
       )}
@@ -59,17 +59,17 @@ export function Reporte({ e }: { e: Ejecucion }) {
     <div className="tarjeta">
       <h2 className="mb-2 font-semibold">Reporte de ejecución</h2>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm md:grid-cols-3">
-        <div><dt className="text-slate-500">Semestre · corte</dt><dd>{e.semestre} · {e.corte}</dd></div>
-        <div><dt className="text-slate-500">Lanzada por</dt><dd>{e.ejecutado_por} ({e.ejecutor === "github" ? "GitHub Actions" : "CLI local"})</dd></div>
-        <div><dt className="text-slate-500">Fuentes</dt><dd>{e.fuentes}</dd></div>
-        <div><dt className="text-slate-500">Ofertas encontradas</dt><dd>{e.ofertas_encontradas}</dd></div>
-        <div><dt className="text-slate-500">Guardadas (nuevas y relevantes)</dt><dd>{e.ofertas_guardadas}</dd></div>
-        <div><dt className="text-slate-500">Duplicados eliminados</dt><dd>{e.duplicados_eliminados}</dd></div>
-        <div><dt className="text-slate-500">No relevantes descartadas</dt><dd>{e.no_relevantes}</dd></div>
-        <div><dt className="text-slate-500">Total del corte / meta</dt><dd>{e.total_corte} / {e.meta_ofertas}</dd></div>
-        <div><dt className="text-slate-500">Mini corrida</dt><dd>{e.mini_corrida ? "sí" : "no"}</dd></div>
-        <div><dt className="text-slate-500">Duración</dt><dd>{duracion(e.duracion_segundos || 0)}</dd></div>
-        <div><dt className="text-slate-500">Modo</dt><dd>{e.modo}</dd></div>
+        <div><dt className="text-texto-suave">Semestre · corte</dt><dd>{e.semestre} · {e.corte}</dd></div>
+        <div><dt className="text-texto-suave">Lanzada por</dt><dd>{e.ejecutado_por} ({e.ejecutor === "github" ? "GitHub Actions" : "CLI local"})</dd></div>
+        <div><dt className="text-texto-suave">Fuentes</dt><dd>{e.fuentes}</dd></div>
+        <div><dt className="text-texto-suave">Ofertas encontradas</dt><dd>{e.ofertas_encontradas}</dd></div>
+        <div><dt className="text-texto-suave">Guardadas (nuevas y relevantes)</dt><dd>{e.ofertas_guardadas}</dd></div>
+        <div><dt className="text-texto-suave">Duplicados eliminados</dt><dd>{e.duplicados_eliminados}</dd></div>
+        <div><dt className="text-texto-suave">No relevantes descartadas</dt><dd>{e.no_relevantes}</dd></div>
+        <div><dt className="text-texto-suave">Total del corte / meta</dt><dd>{e.total_corte} / {e.meta_ofertas}</dd></div>
+        <div><dt className="text-texto-suave">Mini corrida</dt><dd>{e.mini_corrida ? "sí" : "no"}</dd></div>
+        <div><dt className="text-texto-suave">Duración</dt><dd>{duracion(e.duracion_segundos || 0)}</dd></div>
+        <div><dt className="text-texto-suave">Modo</dt><dd>{e.modo}</dd></div>
       </dl>
       {e.conteo_por_fuente && (
         <table className="tabla mt-3">
@@ -88,7 +88,7 @@ export function Reporte({ e }: { e: Ejecucion }) {
           <ul className="list-disc pl-5 text-sm text-amber-800">{e.errores_detalle.map((x, i) => <li key={i}>{x}</li>)}</ul>
         </div>
       )}
-      {e.uso_llm && <p className="mt-2 text-xs text-slate-500">Clasificación con IA: {JSON.stringify(e.uso_llm)}</p>}
+      {e.uso_llm && <p className="mt-2 text-xs text-texto-suave">Clasificación con IA: {JSON.stringify(e.uso_llm)}</p>}
     </div>
   );
 }
@@ -126,7 +126,7 @@ export default function Ejecuciones() {
           <tbody>
             {datos.map((e) => (
               <tr key={e.id_ejecucion}>
-                <td><Link className="text-unal-oscuro underline" to={`/ejecuciones/${e.id_ejecucion}`}>{e.id_ejecucion}</Link></td>
+                <td><Link className="text-institucional font-semibold underline" to={`/ejecuciones/${e.id_ejecucion}`}>{e.id_ejecucion}</Link></td>
                 <td>{e.fecha}</td><td>{e.semestre} · {e.corte}</td><td><EstadoChip estado={e.estado} /></td>
                 <td>{e.ofertas_encontradas}</td><td>{e.ofertas_guardadas}</td><td>{e.duplicados_eliminados}</td><td>{e.total_corte}</td>
                 <td>{duracion(e.duracion_segundos || 0)}</td>
@@ -134,7 +134,7 @@ export default function Ejecuciones() {
             ))}
           </tbody>
         </table>
-        {datos.length === 0 && <p className="p-2 text-sm text-slate-500">Todavía no hay ejecuciones.</p>}
+        {datos.length === 0 && <p className="p-2 text-sm text-texto-suave">Todavía no hay ejecuciones.</p>}
       </div>
     </div>
   );

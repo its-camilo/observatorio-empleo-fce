@@ -25,7 +25,7 @@ export default function Cursos() {
             <tbody>{datos.map((c) => (
               <tr key={c.url + c.semestre + c.corte}>
                 <td>{c.termino}</td><td>{c.plataforma}</td><td>{c.posicion}</td>
-                <td><a className="text-unal-oscuro underline" href={c.url} target="_blank" rel="noreferrer">{c.titulo}</a></td>
+                <td><a className="text-institucional font-semibold underline" href={c.url} target="_blank" rel="noreferrer">{c.titulo}</a></td>
                 <td className="text-xs">{c.organizacion}</td><td className="text-xs">{c.nivel}</td>
                 <td>{c.calificacion ?? "—"}</td>
                 <td className="text-xs">{c.num_calificaciones ? `${c.num_calificaciones.toLocaleString("es-CO")} calificaciones` : c.inscritos_recientes ? `${c.inscritos_recientes.toLocaleString("es-CO")} inscritos recientes` : "—"}</td>
@@ -33,7 +33,7 @@ export default function Cursos() {
               </tr>
             ))}</tbody>
           </table>
-          {datos.length === 0 && <p className="p-2 text-sm text-slate-500">Sin cursos todavía.</p>}
+          {datos.length === 0 && <p className="p-2 text-sm text-texto-suave">Sin cursos todavía.</p>}
         </div>
       )}
     </div>

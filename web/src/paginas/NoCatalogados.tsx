@@ -46,7 +46,7 @@ export default function NoCatalogados() {
               </tr>
             ))}</tbody>
           </table>
-          {datos.length === 0 && <p className="p-2 text-sm text-slate-500">No hay términos en este estado.</p>}
+          {datos.length === 0 && <p className="p-2 text-sm text-texto-suave">No hay términos en este estado.</p>}
         </div>
       )}
     </div>

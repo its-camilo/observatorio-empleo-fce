@@ -19,7 +19,7 @@ function Editor({ p, admin, alGuardar }: { p: Param; admin: boolean; alGuardar: 
   };
   return (
     <details className="tarjeta">
-      <summary className="cursor-pointer"><b>{p.clave}</b> <span className="text-sm text-slate-600">— {p.descripcion}</span></summary>
+      <summary className="cursor-pointer"><b>{p.clave}</b> <span className="text-sm text-texto-suave">— {p.descripcion}</span></summary>
       <textarea className="campo mt-2 h-64 w-full font-mono text-xs" disabled={!admin} value={texto} onChange={(e) => setTexto(e.target.value)} />
       {msg && <Aviso tipo={msg.tipo}>{msg.t}</Aviso>}
       {admin && <button className="btn" onClick={guardar}>Guardar</button>}

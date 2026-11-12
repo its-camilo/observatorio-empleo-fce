@@ -50,7 +50,7 @@ export default function TokensMcp() {
                 <td>{!t.revocado && <button className="btn-peligro" onClick={async () => { if (confirm("¿Revocar este token?")) { await api.del(`/tokens-mcp/${t.id}`); recargar(); } }}>Revocar</button>}</td></tr>
             ))}</tbody>
           </table>
-          {datos.length === 0 && <p className="p-2 text-sm text-slate-500">No tiene tokens.</p>}
+          {datos.length === 0 && <p className="p-2 text-sm text-texto-suave">No tiene tokens.</p>}
         </div>
       )}
     </div>
