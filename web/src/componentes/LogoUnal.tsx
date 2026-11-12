@@ -2,7 +2,7 @@ type Props = {
   className?: string;
 };
 
-/** Logo institucional UNAL: blanco sobre transparente (usar sobre fondo oscuro #042361). */
+/** Logo institucional UNAL: blanco sobre transparente (fondo institucional azul o marina). */
 export default function LogoUnal({ className = "" }: Props) {
   return (
     <picture>
