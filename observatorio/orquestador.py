@@ -29,6 +29,17 @@ NOMBRES_FUENTE = {"linkedin": "LinkedIn", "indeed": "Indeed", "google": "Google 
 CORTES = {"inicio": "Inicio", "mitad": "Mitad", "final": "Final"}
 
 
+def contar_crudas_ejecucion(s: Session, id_ejecucion: str) -> int:
+    return s.scalar(select(func.count()).select_from(OfertaCruda).where(OfertaCruda.id_ejecucion == id_ejecucion)) or 0
+
+
+def limite_extraccion_corrida(cfg: dict, ejec: Ejecucion) -> int:
+    """Tope global de ofertas crudas por corrida (0 = sin tope). Se congela en ejec.parametros al preparar."""
+    if ejec.parametros and "limite_extraccion_corrida" in ejec.parametros:
+        return int(ejec.parametros["limite_extraccion_corrida"] or 0)
+    return int(cfg.get("limite_extraccion_corrida") or 0)
+
+
 def normalizar_corte(corte: str) -> str:
     c = (corte or "").strip().lower()
     if c not in CORTES:
@@ -88,6 +99,9 @@ def preparar(s: Session, semestre: str, corte: str, id_ejecucion: str | None = N
     ejec.fase = "preparada"
     ejec.inicio = ejec.inicio or ahora()
     ejec.meta_ofertas = int(cfg.get("meta_ofertas", 10000))
+    limite_ext = int(cfg.get("limite_extraccion_corrida") or 0)
+    if limite_ext > 0:
+        ejec.parametros = {**(ejec.parametros or {}), "limite_extraccion_corrida": limite_ext}
     if os.getenv("GITHUB_RUN_ID"):
         ejec.github_run_url = f"{os.getenv('GITHUB_SERVER_URL', 'https://github.com')}/{os.getenv('GITHUB_REPOSITORY')}/actions/runs/{os.getenv('GITHUB_RUN_ID')}"
 
@@ -178,9 +192,18 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
     if cfg["dedup"].get("alcance", "global") == "global":
         conocidos |= set(s.scalars(select(Oferta.id_fuente).where(Oferta.fuente == nombre)))
     inicio = time.time()
-    resumen = {"fuente": nombre, "particiones": len(particiones), "hechas": 0, "ofertas": 0, "errores": 0, "bloqueada": False}
-    log.info("[%s] Fragmento %d/%d: %d consultas pendientes", nombre, fragmento + 1, fragmentos, len(particiones))
+    tope = limite_extraccion_corrida(cfg, ejec)
+    resumen = {"fuente": nombre, "particiones": len(particiones), "hechas": 0, "ofertas": 0, "errores": 0, "bloqueada": False,
+               "tope_extraccion": tope or None}
+    log.info("[%s] Fragmento %d/%d: %d consultas pendientes%s", nombre, fragmento + 1, fragmentos, len(particiones),
+             f" (tope global {tope} crudas)" if tope else "")
+    detenido_por_tope = False
     for p in particiones:
+        if tope and contar_crudas_ejecucion(s, id_ejecucion) >= tope:
+            log.info("[%s] Tope global de extracción alcanzado (%d ofertas crudas)", nombre, tope)
+            resumen["tope_alcanzado"] = True
+            detenido_por_tope = True
+            break
         if max_minutos and (time.time() - inicio) / 60 > max_minutos:
             log.info("[%s] Se alcanzó el tiempo máximo; lo pendiente queda para la próxima reanudación", nombre)
             break
@@ -191,6 +214,10 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
         n = 0
         try:
             for o in extractor.extraer(c, lambda idf: idf in conocidos):
+                if tope and contar_crudas_ejecucion(s, id_ejecucion) >= tope:
+                    detenido_por_tope = True
+                    resumen["tope_alcanzado"] = True
+                    break
                 if o.id_fuente in conocidos:
                     continue
                 conocidos.add(o.id_fuente)
@@ -199,9 +226,14 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
                 n += 1
                 if n % 25 == 0:
                     s.commit()  # guardar lo ya extraído (RF-16)
-            p.estado = "hecha"
-            p.error = None
-            resumen["hechas"] += 1
+            if detenido_por_tope:
+                p.estado = "hecha"
+                p.error = None
+                resumen["hechas"] += 1
+            else:
+                p.estado = "hecha"
+                p.error = None
+                resumen["hechas"] += 1
         except FuenteBloqueada as e:
             p.estado = "error"
             p.error = explicar_error(fuente, e)
@@ -221,6 +253,9 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
         except IntegrityError:
             s.rollback()
         log.info("[%s] '%s' en %s: %d ofertas nuevas", nombre, p.termino, nombre_u, n)
+        if detenido_por_tope:
+            log.info("[%s] Tope global de extracción alcanzado (%d ofertas crudas)", nombre, tope)
+            break
         if resumen["bloqueada"]:
             log.warning("[%s] Se detiene este fragmento para no insistir; se puede reanudar más tarde", nombre)
             break
@@ -249,7 +284,8 @@ def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mi
     # Mini corrida automática si no se llegó a la meta
     mini_cfg = cfg.get("mini_corrida") or {}
     total = total_corte(s, ejec.semestre, ejec.corte)
-    if permitir_mini and ejec.modo == "completa" and mini_cfg.get("habilitada") and not ejec.mini_corrida \
+    sin_tope_extraccion = limite_extraccion_corrida(cfg, ejec) <= 0
+    if permitir_mini and sin_tope_extraccion and ejec.modo == "completa" and mini_cfg.get("habilitada") and not ejec.mini_corrida \
             and total < int(cfg.get("meta_ofertas", 10000)):
         log.info("Hay %d ofertas relevantes en el corte (meta %s): se inicia la mini corrida con términos ampliados",
                  total, cfg.get("meta_ofertas"))
@@ -328,7 +364,11 @@ def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:
     if pendientes:
         errores.append(f"Quedaron {pendientes} consultas sin hacer (tiempo agotado o fuente bloqueada). "
                        f"Puede reanudar la corrida con el mismo id: {ejec.id_ejecucion}.")
-    if ejec.total_corte < (ejec.meta_ofertas or 0) and ejec.modo == "completa":
+    tope_ext = limite_extraccion_corrida(leer_config(s), ejec)
+    if tope_ext > 0 and crudas >= tope_ext:
+        errores.append(f"La extracción se detuvo al alcanzar el tope configurado de {tope_ext} ofertas crudas "
+                       f"(Configuración → limite_extraccion_corrida).")
+    elif ejec.total_corte < (ejec.meta_ofertas or 0) and ejec.modo == "completa" and tope_ext <= 0:
         errores.append(f"El corte tiene {ejec.total_corte} ofertas relevantes; no alcanzó la meta de {ejec.meta_ofertas}.")
     ejec.errores_detalle = errores
     ejec.errores = "\n".join(errores) or None

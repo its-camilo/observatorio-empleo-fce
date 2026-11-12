@@ -47,8 +47,9 @@ export default function LanzarCorrida() {
       <div className="tarjeta max-w-2xl">
         <p className="mb-3 text-sm text-texto-suave">
           La corrida se ejecuta en GitHub Actions: busca ofertas en LinkedIn, Indeed, Google Jobs y Computrabajo (últimos 30 días), limpia,
-          elimina duplicados, clasifica por carrera, detecta softwares y guarda todo en la base. Si no llega a la meta de ofertas, hace sola
-          una mini corrida con términos más variados. Puede tardar varias horas; puede cerrar esta página.
+          elimina duplicados, clasifica por carrera, detecta softwares y guarda todo en la base. El tope de descarga por corrida
+          (`limite_extraccion_corrida` en Configuración; 0 = sin tope) y la meta de relevantes guardadas (`meta_ofertas`) son parámetros distintos.
+          Si no llega a la meta y no hay tope de extracción, hace una mini corrida. Puede tardar varias horas; puede cerrar esta página.
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <div><label className="etiqueta">Semestre</label>

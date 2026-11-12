@@ -89,8 +89,10 @@ posición en el buscador, calificación y popularidad. Se actualizan con cada co
 
 ## 12. Configuración (administradores)
 
-Parámetros en formato JSON: fuentes (activar/desactivar, límites, pausas), ciudades, ventana de días, tipo de oferta, meta,
-mini corrida, duplicados, IA, reglas de carrera, cursos. Si no está seguro, no cambie nada y consulte a Desarrollo.
+Parámetros en formato JSON: fuentes (activar/desactivar, `max_por_particion` por término y ciudad, pausas), ciudades,
+ventana de días, tipo de oferta, **`limite_extraccion_corrida`** (tope de ofertas crudas a descargar en una corrida; `0` = sin tope),
+**`meta_ofertas`** (meta mínima de relevantes guardadas en el corte; activa mini corrida si no se alcanza), mini corrida, duplicados,
+IA, reglas de carrera, cursos. Si no está seguro, no cambie nada y consulte a Desarrollo.
 
 ## 13. Actualizar Power BI
 

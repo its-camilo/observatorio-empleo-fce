@@ -42,7 +42,18 @@ POR_DEFECTO: dict[str, dict[str, Any]] = {
     },
     "ventana_dias": {"valor": 30, "descripcion": "Solo ofertas publicadas en los últimos N días."},
     "tipo_oferta": {"valor": "ambas", "descripcion": "practica, empleo o ambas."},
-    "meta_ofertas": {"valor": 10000, "descripcion": "Meta de ofertas únicas relevantes por corte."},
+    "meta_ofertas": {
+        "valor": 10000,
+        "descripcion": "Meta mínima de ofertas únicas relevantes que deben quedar guardadas en el corte. "
+                       "Si tras la corrida hay menos, se lanza la mini corrida (si está habilitada). "
+                       "No limita cuántas ofertas se descargan de las fuentes.",
+    },
+    "limite_extraccion_corrida": {
+        "valor": 0,
+        "descripcion": "Tope de ofertas crudas a descargar en una corrida (0 = sin tope). "
+                       "Al llegar, se detiene la extracción en todas las fuentes y no se ejecuta mini corrida. "
+                       "Útil para pruebas (p. ej. 100). No confundir con max_por_particion en fuentes (máximo por término y ciudad).",
+    },
     "mini_corrida": {
         "valor": {"habilitada": True, "max_minutos": 240, "fuentes": ["linkedin", "indeed", "computrabajo"]},
         "descripcion": "Si no se llega a la meta, se hace una mini corrida con los términos 'ampliado'.",
