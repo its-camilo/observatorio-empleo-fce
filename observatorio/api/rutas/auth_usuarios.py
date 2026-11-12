@@ -118,8 +118,8 @@ def crear_token(datos: NuevoToken, u: Usuario = Depends(usuario_actual), s: Sess
     token, fila = generar_token_mcp(s, u.email, datos.nombre)
     s.commit()
     return {**_token(fila), "token": token,
-            "aviso": "Copie el token ahora: no se volverá a mostrar. Se guarda solo su huella (hash). Hereda su rol "
-                     f"({'administrador' if u.rol == 'admin' else 'solo lectura'} en el MCP)."}
+            "aviso": "Copie el token ahora: no se volverá a mostrar. Se guarda solo su huella (hash). Hereda su rol en el MCP "
+                     f"({'administrador (incluye corridas)' if u.rol == 'admin' else 'solo lectura, sin herramientas de corrida'})."}
 
 
 @router.delete("/tokens-mcp/{tid}")

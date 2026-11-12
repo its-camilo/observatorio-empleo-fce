@@ -5,8 +5,8 @@
   No expone usuarios, validaciones, tokens ni configuración interna.
 - Con token personal (cabecera `Authorization: Bearer obs_...`) desde la página
   "Tokens MCP", las herramientas heredan el rol del usuario que lo creó:
-  lectura ampliada (p. ej. estado_corrida) para cualquier usuario aprobado;
-  lanzar_corrida solo si el dueño del token es administrador. Sin token, solo
+  las mismas herramientas públicas de lectura; estado_corrida y lanzar_corrida
+  solo si el dueño del token es administrador. Sin token, solo
   herramientas públicas de lectura.
 - Límite básico de solicitudes por IP y topes en los resultados.
 
@@ -43,9 +43,8 @@ MAX_DESCRIPCION = 2000
 MAX_RANKING = 50
 MAX_CURSOS = 100
 MAX_EJECUCIONES = 50
-HERRAMIENTAS_CON_SESION = {"estado_corrida"}
-HERRAMIENTAS_SOLO_ADMIN = {"lanzar_corrida"}
-HERRAMIENTAS_PRIVILEGIADAS = HERRAMIENTAS_CON_SESION | HERRAMIENTAS_SOLO_ADMIN
+HERRAMIENTAS_SOLO_ADMIN = {"lanzar_corrida", "estado_corrida"}
+HERRAMIENTAS_PRIVILEGIADAS = HERRAMIENTAS_SOLO_ADMIN
 
 
 @dataclass(frozen=True)
@@ -116,14 +115,12 @@ class ServidorObservatorio(MCPServer):
         if ses is None:
             herramientas = [h for h in herramientas if h.name not in HERRAMIENTAS_PRIVILEGIADAS]
         elif ses.rol != "admin":
-            herramientas = [h for h in herramientas if h.name not in HERRAMIENTAS_SOLO_ADMIN]
+            herramientas = [h for h in herramientas if h.name not in HERRAMIENTAS_PRIVILEGIADAS]
         return herramientas
 
     async def call_tool(self, name: str, arguments: dict[str, Any], context=None, *args, **kwargs):
         ses = _sesion()
-        if name in HERRAMIENTAS_PRIVILEGIADAS and ses is None:
-            raise ToolError(f"Herramienta desconocida o no autorizada: {name}")
-        if name in HERRAMIENTAS_SOLO_ADMIN and (ses is None or ses.rol != "admin"):
+        if name in HERRAMIENTAS_PRIVILEGIADAS and (ses is None or ses.rol != "admin"):
             raise ToolError(f"Herramienta desconocida o no autorizada: {name}")
         return await super().call_tool(name, arguments, context, *args, **kwargs)
 
@@ -249,8 +246,8 @@ def construir_servidor() -> ServidorObservatorio:
 
     @mcp.tool()
     def estado_corrida(run_id: str) -> dict:
-        """[Con token personal] Estado y progreso de una corrida (consultas hechas por fuente, ofertas, reporte final)."""
-        _requiere_sesion()
+        """[Solo administradores] Estado y progreso de una corrida (consultas hechas por fuente, ofertas, reporte final)."""
+        _requiere_admin()
         from observatorio.corridas import ejecucion_dict, progreso
         from observatorio.db.modelos import Ejecucion
         with fabrica_sesiones()() as s:

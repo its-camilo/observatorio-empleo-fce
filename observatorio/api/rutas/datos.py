@@ -45,12 +45,12 @@ def lanzar_corrida(d: LanzarIn, u: Usuario = Depends(solo_admin), s: Session = D
 
 
 @router.get("/corridas")
-def listar_corridas(_: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
+def listar_corridas(_: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
     return [ejecucion_dict(e) for e in s.scalars(select(Ejecucion).order_by(Ejecucion.creado_en.desc()).limit(100))]
 
 
 @router.get("/corridas/{id_ejecucion}")
-def ver_corrida(id_ejecucion: str, _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
+def ver_corrida(id_ejecucion: str, _: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
     e = s.get(Ejecucion, id_ejecucion)
     if e is None:
         raise HTTPException(404, "Ejecución no encontrada")
@@ -104,13 +104,16 @@ def comparar(semestre_a: str, corte_a: str, semestre_b: str, corte_b: str, carre
 
 
 @router.get("/dashboard")
-def dashboard(_: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
+def dashboard(u: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
     cs = analisis.cortes_disponibles(s)
     ultimo = cs[-1] if cs else None
+    ultimas = []
+    if u.rol == "admin":
+        ultimas = [ejecucion_dict(e) for e in s.scalars(select(Ejecucion).order_by(Ejecucion.creado_en.desc()).limit(5))]
     return {"cortes": cs, "ultimo_corte": ultimo,
             "resumen": analisis.resumen_corte(s, ultimo["semestre"], ultimo["corte"]) if ultimo else None,
             "total_historico": s.scalar(select(func.count()).select_from(Oferta)) or 0,
-            "ultimas_corridas": [ejecucion_dict(e) for e in s.scalars(select(Ejecucion).order_by(Ejecucion.creado_en.desc()).limit(5))]}
+            "ultimas_corridas": ultimas}
 
 
 # ----------------------------------------------------------------- exportación (RF-11)

@@ -74,8 +74,8 @@ def test_token_usuario_solo_lectura_en_mcp(cliente):
     HU = {"Authorization": f"Bearer {sesion}"}
     t = cliente.post("/api/tokens-mcp", json={"nombre": "lectura"}, headers=HU).json()
     h = herramientas(cliente, t["token"])
-    assert "estado_corrida" in h and "lanzar_corrida" not in h
-    r = rpc(cliente, "tools/call", {"name": "lanzar_corrida", "arguments": {"semestre": "2026-II", "corte": "inicio"}}, token=t["token"])
+    assert "estado_corrida" not in h and "lanzar_corrida" not in h
+    r = rpc(cliente, "tools/call", {"name": "estado_corrida", "arguments": {"run_id": "x"}}, token=t["token"])
     assert r["result"]["isError"] is True
 
 

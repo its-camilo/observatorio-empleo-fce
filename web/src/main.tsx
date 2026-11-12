@@ -26,7 +26,7 @@ export const useEsAdmin = () => useContext(SesionCtx).sesion?.usuario.rol === "a
 const MENU: { a: string; texto: string; admin?: boolean }[] = [
   { a: "/", texto: "Inicio" },
   { a: "/lanzar", texto: "Lanzar corrida", admin: true },
-  { a: "/ejecuciones", texto: "Ejecuciones y reportes" },
+  { a: "/ejecuciones", texto: "Ejecuciones y reportes", admin: true },
   { a: "/ofertas", texto: "Ofertas" },
   { a: "/rankings", texto: "Rankings y comparación" },
   { a: "/catalogo", texto: "Catálogo y sinónimos" },
@@ -95,8 +95,8 @@ function App() {
           <Route element={<Marco />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/lanzar" element={<SoloAdmin><LanzarCorrida /></SoloAdmin>} />
-            <Route path="/ejecuciones" element={<Ejecuciones />} />
-            <Route path="/ejecuciones/:id" element={<Ejecuciones />} />
+            <Route path="/ejecuciones" element={<SoloAdmin><Ejecuciones /></SoloAdmin>} />
+            <Route path="/ejecuciones/:id" element={<SoloAdmin><Ejecuciones /></SoloAdmin>} />
             <Route path="/ofertas" element={<Ofertas />} />
             <Route path="/rankings" element={<Rankings />} />
             <Route path="/catalogo" element={<Catalogo />} />

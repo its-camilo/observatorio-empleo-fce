@@ -132,7 +132,7 @@ URL: `https://SU-DOMINIO/mcp` (transporte *Streamable HTTP*). Sin autenticación
 `resumen_corte`, `listar_catalogo`, `listar_ejecuciones`, `listar_cursos_tendencia`. No expone usuarios, validaciones ni configuración.
 
 Cualquier usuario aprobado genera un **token personal** en *Tokens MCP*; hereda su rol vía
-`Authorization: Bearer obs_...` (`estado_corrida`; los admins también tienen `lanzar_corrida`).
+`Authorization: Bearer obs_...` (los admins también tienen `estado_corrida` y `lanzar_corrida`).
 
 Sin token (solo lectura):
 

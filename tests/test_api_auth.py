@@ -67,6 +67,7 @@ def test_rutas_protegidas_y_solo_admin(cliente):
     assert cliente.get("/api/usuarios", headers=HU).status_code == 403
     assert cliente.post("/api/tokens-mcp", json={"nombre": "x"}, headers=HU).status_code == 200
     assert cliente.post("/api/corridas", json={"semestre": "2026-II", "corte": "inicio"}, headers=HU).status_code == 403
+    assert cliente.get("/api/corridas", headers=HU).status_code == 403
     assert cliente.post("/api/validacion/muestras", json={"semestre": "2026-II", "corte": "inicio", "tamano": 5}, headers=HU).status_code == 403
 
 

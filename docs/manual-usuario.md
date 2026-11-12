@@ -107,7 +107,7 @@ Siga [powerbi/README.md](../powerbi/README.md) la primera vez. Después de cada 
 
 Cualquier persona puede consultar los datos públicos desde Claude, ChatGPT o Cursor agregando el servidor
 `https://SU-DOMINIO/mcp`. Cualquier usuario aprobado puede generar un **token** en **Tokens MCP** (se muestra una sola vez;
-revóquelo si se pierde): hereda su rol (consulta y `estado_corrida`; los admins también pueden lanzar corridas). Ver documentación técnica, sección 8.
+revóquelo si se pierde): hereda su rol (consulta; los admins también ven estado y pueden lanzar corridas). Ver documentación técnica, sección 8.
 
 ## 16. Preguntas frecuentes
 

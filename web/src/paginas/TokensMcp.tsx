@@ -23,7 +23,7 @@ export default function TokensMcp() {
       <Titulo>Tokens del servidor MCP</Titulo>
       <Aviso>
         El servidor MCP <code className="font-mono">{url}</code> es público y de solo lectura. Su token personal hereda su rol: con cuenta
-        de usuario aparece <b>estado_corrida</b>; los administradores además pueden usar <b>lanzar_corrida</b>. Envíe el token en la cabecera
+        de usuario amplía las mismas consultas que la sesión web; los administradores además ven <b>estado_corrida</b> y <b>lanzar_corrida</b>. Envíe el token en la cabecera
         <code className="font-mono"> Authorization: Bearer &lt;token&gt;</code>. Revóquelo si se filtra.
       </Aviso>
       {err && <Aviso tipo="error">{err}</Aviso>}
