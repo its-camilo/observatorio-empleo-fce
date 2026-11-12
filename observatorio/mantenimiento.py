@@ -43,8 +43,11 @@ def desactivar_terminos_retirados(s: Session) -> int:
     return len(terminos)
 
 
-def _ids_ofertas_operativas(s: Session, patrones: list[str]) -> list[str]:
+def _scan_ofertas_operativas(
+    s: Session, patrones: list[str], *, max_ejemplos: int = 20
+) -> tuple[list[str], list[str]]:
     ids: list[str] = []
+    ejemplos: list[str] = []
     ultimo = ""
     while True:
         filas = s.execute(
@@ -59,15 +62,20 @@ def _ids_ofertas_operativas(s: Session, patrones: list[str]) -> list[str]:
             ultimo = oid
             if cargo and titulo_excluido_operativo(cargo, patrones):
                 ids.append(oid)
-    return ids
+                if len(ejemplos) < max_ejemplos and cargo not in ejemplos:
+                    ejemplos.append(cargo)
+    return ids, ejemplos
 
 
-def purgar_ofertas_operativas(s: Session, *, aplicar: bool = False) -> dict[str, int]:
+def purgar_ofertas_operativas(s: Session, *, aplicar: bool = False, max_ejemplos: int = 20) -> dict:
     """Elimina ofertas cuyo cargo coincide con exclusion_operativa_titulo."""
     patrones = patrones_exclusion_operativa(s)
-    ids = _ids_ofertas_operativas(s, patrones)
+    ids, ejemplos = _scan_ofertas_operativas(s, patrones, max_ejemplos=max_ejemplos)
     if not aplicar or not ids:
-        return {"candidatas": len(ids), "eliminadas": 0, "validaciones": 0}
+        salida: dict = {"candidatas": len(ids), "eliminadas": 0, "validaciones": 0}
+        if not aplicar and ejemplos:
+            salida["ejemplos_cargos"] = ejemplos
+        return salida
     n_val = s.scalar(select(func.count()).select_from(Validacion).where(Validacion.id_oferta.in_(ids))) or 0
     if n_val:
         s.execute(delete(Validacion).where(Validacion.id_oferta.in_(ids)))
