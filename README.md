@@ -37,7 +37,7 @@ observatorio/            Paquete Python
 api/index.py             entrada de Vercel
 web/                     front (React + Vite + TypeScript + Tailwind)
 alembic/                 migraciones de la base
-.github/workflows/       corrida.yml, pruebas.yml, mantener-activo.yml (keep-alive horario laboral)
+.github/workflows/       corrida.yml (scraping) y pruebas.yml
 powerbi/                 consultas Power Query y guía
 tests/                   pruebas (pytest)
 ```
@@ -118,24 +118,6 @@ Vercel no ejecuta las corridas (duran horas); solo las lanza en GitHub Actions y
   devuelve `db_latencia_ms` (útil para medir Neon tras *scale-to-zero*: suele sumar ~0,5–2 s en la primera consulta).
 - En Vercel la API usa **imports diferidos** (MCP y exportación pesada solo cuando se usan), **NullPool** contra Neon
   (host con `-pooler` si aplica), región **`iad1`** en `vercel.json` y caché breve en `/api/dashboard`.
-- Neon en plan gratuito **no conviene mantenerla despierta 24/7**: la cuota mensual de cómputo se agotaría si la base
-  estuviera activa todo el tiempo.
-
-### Keep-alive en horario laboral (opcional)
-
-El workflow **Mantener activo (salud + BD)** (`.github/workflows/mantener-activo.yml`) hace `GET` a
-`/api/salud?db=1` cada **5 minutos**, solo **lunes a viernes de 7:00 a 20:00 (America/Bogotá)** — en cron UTC eso es
-`*/5` entre **12:00–23:55 UTC** los días laborables y, para el tramo **19:00–20:00 Bogotá**, **`*/5` en la hora 0** y
-**`0` en la hora 1 UTC** del día siguiente (mar–sáb en el calendario UTC). También se puede lanzar a mano con
-*workflow_dispatch*.
-
-| Ajuste | Cómo |
-|---|---|
-| URL de la app | *Settings → Secrets and variables → Actions → Variables*: `URL_APP` (por defecto `https://observatorio-empleo-fce.vercel.app` si no se define) |
-| Cambiar horario | Edite las expresiones `cron` en `mantener-activo.yml` (siempre en **UTC**) |
-| Desactivar | Borre el workflow, deshabilítelo en *Actions*, o deje solo `workflow_dispatch` quitando los bloques `schedule` |
-
-Si un ping falla por timeout, el job **reintenta una vez** y termina con **warning** (no rompe el CI).
 
 ## Servidor propio (migración desde Vercel/Neon)
 
