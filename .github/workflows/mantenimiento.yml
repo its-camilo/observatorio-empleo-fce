@@ -1,13 +1,13 @@
 name: Mantenimiento de base de datos
 
-# Aplica migraciones, actualiza semilla y (opcional) purga ofertas operativas en Neon/Postgres.
+# Aplica migraciones, actualiza semilla y (opcional) purga por reglas (operativo + valor formativo) en Neon/Postgres.
 # No se ejecuta en deploy; use workflow_dispatch desde Actions cuando Camilo quiera actualizar producción.
 
 on:
   workflow_dispatch:
     inputs:
       aplicar:
-        description: "Purga operativa: false = solo vista previa; true = ejecuta --aplicar"
+        description: "Purga por reglas: false = solo vista previa; true = ejecuta --aplicar"
         required: true
         type: boolean
         default: false
@@ -41,11 +41,11 @@ jobs:
         run: |
           echo "=== Semilla ==="
           python -m observatorio.run semilla
-      - name: Purga operativa (vista previa o aplicar)
+      - name: Purga por reglas (vista previa o aplicar)
         run: |
-          echo "=== Purga operativa (aplicar=${{ inputs.aplicar }}) ==="
+          echo "=== Purga por reglas (aplicar=${{ inputs.aplicar }}) ==="
           if [ "${{ inputs.aplicar }}" = "true" ]; then
-            python -m observatorio.run purga-operativa --aplicar
+            python -m observatorio.run purga-reglas --aplicar
           else
-            python -m observatorio.run purga-operativa
+            python -m observatorio.run purga-reglas
           fi

@@ -54,8 +54,39 @@ def _contiene(texto_plegado: str, palabra: str) -> bool:
     return re.search(r"(?<![a-z0-9])" + re.escape(w), texto_plegado) is not None
 
 
+# Roles profesionales: no aplicar exclusión operativa aunque el título incluya «administrativ», «comercial», etc.
+_CARGO_PROFESIONAL = (
+    "analista",
+    "contador",
+    "contadora",
+    "economista",
+    "especialista",
+    "consultor",
+    "consultora",
+    "auditor",
+    "auditora",
+    "revisor fiscal",
+    "profesional",
+    "coordinador financiero",
+    "coordinadora financiera",
+    "coordinador contable",
+    "coordinadora contable",
+    "gerente financiero",
+    "gerente contable",
+    "director financiero",
+    "director contable",
+)
+
+
+def titulo_es_cargo_profesional(cargo: str) -> bool:
+    t = " " + plegar(cargo) + " "
+    return any(_contiene(t, p) for p in _CARGO_PROFESIONAL)
+
+
 def titulo_excluido_operativo(cargo: str, patrones: list[str]) -> bool:
     """Cargos operativos de bajo nivel que no deben contarse aunque coincidan con reglas amplias (p. ej. «administrativ»)."""
+    if titulo_es_cargo_profesional(cargo):
+        return False
     t = " " + plegar(cargo) + " "
     return any(_contiene(t, p) for p in patrones)
 

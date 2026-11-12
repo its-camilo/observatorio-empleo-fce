@@ -97,7 +97,14 @@ Tablas del diccionario: `ofertas`, `oferta_software`, `catalogo` (+ `sinonimos`)
 El observatorio prioriza ofertas de nivel analista/profesional o superior (no auxiliar/asistente administrativo de oficina).
 Los patrones editables `exclusion_operativa_titulo` (tabla `config`) descartan el cargo **antes** de las reglas de carrera, para que
 palabras amplias como `administrativ` no clasifiquen como Administración de Empresas un «Auxiliar Administrativo» encontrado en Computrabajo.
-En bases ya pobladas: `python -m observatorio.run purga-operativa` (vista previa) y `python -m observatorio.run purga-operativa --aplicar`.
+En bases ya pobladas: `python -m observatorio.run purga-reglas` (vista previa con conteos por motivo y ejemplos) y
+`python -m observatorio.run purga-reglas --aplicar`. El alias `purga-operativa` ejecuta la misma lógica.
+
+### Valor formativo (`requiere_software_o_habilidad`)
+
+Con `config.requiere_software_o_habilidad = true` (por defecto), una oferta clasificada como relevante solo se guarda si
+menciona software del catálogo (salvo Office genérico aislado) o una habilidad técnica cursable (`pipeline/valor_formativo.py`).
+El LLM (`openrouter/free`) devuelve además `habilidades_tecnicas` y `tiene_habilidad_cursable`; si no hay LLM, aplican solo reglas y catálogo.
 
 ### Clasificación y relevancia (RF-06)
 Puntaje por carrera = 3 × palabras fuertes del título + 2 × mención explícita de la carrera en la descripción +
@@ -105,6 +112,7 @@ mín(palabras débiles, 3) + 1 si el término de búsqueda es de esa carrera (`c
 - Título con palabra específica de una carrera → relevante (principal = mayor puntaje; secundarias con palabra en el título o puntaje ≥ 3; máx. 5).
 - Título en `exclusion_titulo` sin palabra específica (jefe/coordinador/gerente no cuentan) → no relevante.
 - Sin señales → no relevante. Solo descripción/término → **dudosa** → LLM.
+- Relevante por carrera pero sin software ni habilidad cursable → no se guarda (no cuenta para la meta).
 - LLM (`pipeline/llm.py`): OpenRouter modelo fijo `openrouter/free`, ~12 req/min por defecto, reintentos 429, circuit breaker, caché por hash
   (1 000) y por corrida (600), 16 solicitudes/min, espera ante 429. Sin clave o sin cupo → **respaldo**: relevante si puntaje ≥ 3.
   El reporte muestra cuántas se clasificaron con LLM y cuántas por respaldo.

@@ -18,6 +18,7 @@ from observatorio.pipeline.limpieza import normalizar_cruda
 from observatorio.pipeline.llm import ClienteLLM
 from observatorio.pipeline.no_catalogados import contar_no_catalogados
 from observatorio.pipeline.software import DetectorSoftware
+from observatorio.pipeline.valor_formativo import oferta_tiene_valor_formativo
 from observatorio.texto import es_colombia, normalizar_clave
 
 log = logging.getLogger("observatorio.procesar")
@@ -68,6 +69,7 @@ class Procesador:
         self.sufijo = "" if self.alcance == "global" else f"@{ejec.semestre}-{ejec.corte}"
         self.ventana = int(cfg.get("ventana_dias", 30))
         self.tipo = (cfg.get("tipo_oferta") or "ambas").lower()
+        self.requiere_formativo = bool(cfg.get("requiere_software_o_habilidad", True))
         self.total = ResultadoProceso()
 
     # ------------------------------------------------------------------
@@ -166,8 +168,31 @@ class Procesador:
                 res = respuestas.get(u["id_oferta"])
                 if res is not None:
                     r.por_llm += 1
-                    clasif[u["id_oferta"]] = Clasificacion("relevante" if res["relevante"] else "no_relevante",
-                                                           res["carreras"], c.puntajes, "LLM", "llm")
+                    relevante_llm = res["relevante"]
+                    if relevante_llm and self.requiere_formativo:
+                        ok, motivo_vf = oferta_tiene_valor_formativo(
+                            u["cargo"],
+                            u.get("descripcion") or "",
+                            self.detector,
+                            empresa=u.get("empresa") or "",
+                            habilidades_llm=res.get("habilidades_tecnicas"),
+                            herramientas_llm=res.get("herramientas_no_catalogadas"),
+                            tiene_habilidad_cursable_llm=res.get("tiene_habilidad_cursable"),
+                        )
+                        if not ok:
+                            relevante_llm = False
+                            motivo_llm = f"LLM relevante pero sin valor formativo ({motivo_vf})"
+                        else:
+                            motivo_llm = "LLM"
+                    else:
+                        motivo_llm = "LLM"
+                    clasif[u["id_oferta"]] = Clasificacion(
+                        "relevante" if relevante_llm else "no_relevante",
+                        res["carreras"] if relevante_llm else [],
+                        c.puntajes,
+                        motivo_llm,
+                        "llm",
+                    )
                     for h in res.get("herramientas_no_catalogadas") or []:
                         if not self.detector.coincide_algun_sinonimo(h):
                             k = normalizar_clave(h)
@@ -186,6 +211,16 @@ class Procesador:
             if c.estado != "relevante" or not c.carreras:
                 r.no_relevantes += 1
                 continue
+            if self.requiere_formativo and c.clasificado_por != "llm":
+                ok, _ = oferta_tiene_valor_formativo(
+                    u["cargo"],
+                    u.get("descripcion") or "",
+                    self.detector,
+                    empresa=u.get("empresa") or "",
+                )
+                if not ok:
+                    r.no_relevantes += 1
+                    continue
             o = Oferta(
                 id_oferta=u["id_oferta"], fuente=u["fuente"], url=u["url"], fecha_publicacion=u["fecha_publicacion"],
                 fecha_extraccion=u["fecha_extraccion"], semestre=u["semestre"], corte=u["corte"], cargo=u["cargo"],

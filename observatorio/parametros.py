@@ -117,9 +117,21 @@ POR_DEFECTO: dict[str, dict[str, Any]] = {
             "auxiliar general", "digitador", "auxiliar de archivo", "auxiliar de correspondencia", "auxiliar de servicios generales",
             "auxiliar de gestion documental", "auxiliar de gestión documental", "auxiliar de soporte administrativ",
             "asistente de archivo", "mensajero", "auxiliar de logistica", "auxiliar de logística", "auxiliar de almacen",
-            "auxiliar de almacén", "auxiliar de inventario",
+            "auxiliar de almacén", "auxiliar de inventario", "asistente de gerencia", "asistente de gestion", "asistente de gestión",
+            "auxiliar de servicio al cliente", "auxiliar de servicios al cliente", "asesor comercial", "asesora comercial",
+            "asesor de ventas", "asesora de ventas", "asesor de venta", "cajero", "cajera", "data entry",
+            "auxiliar contable y administrativ", "asistente contable y administrativ",
+            "auxiliar administrativ y contable", "asistente administrativ y contable",
+            "auxiliar administrativa bilingue", "asistente administrativa bilingue", "auxiliar administrativo bilingue",
+            "auxiliar de correspondencia", "operador de call center", "teleoperador", "agente de call center",
         ],
-        "descripcion": "Cargos administrativos u operativos de bajo nivel que se descartan siempre (el observatorio prioriza analista, coordinación de área, gerencia, etc.).",
+        "descripcion": "Cargos administrativos u operativos de bajo nivel que se descartan siempre (incluso si la descripción menciona Excel). "
+                       "No aplican si el cargo es claramente profesional (analista, contador, economista, coordinador financiero, etc.).",
+    },
+    "requiere_software_o_habilidad": {
+        "valor": True,
+        "descripcion": "Solo guardar ofertas relevantes que mencionen software del catálogo (excepto Office genérico) "
+                       "o una habilidad técnica cursable. Ver observatorio/pipeline/valor_formativo.py.",
     },
     "cursos": {
         "valor": {
