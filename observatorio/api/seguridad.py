@@ -123,16 +123,22 @@ def generar_token_mcp(s: Session, email: str, nombre: str) -> tuple[str, TokenMc
     return token, fila
 
 
-def admin_por_token_mcp(s: Session, token: str | None) -> Usuario | None:
-    """Devuelve el admin dueño del token si es válido, no revocado y sigue siendo admin aprobado."""
+def usuario_por_token_mcp(s: Session, token: str | None) -> Usuario | None:
+    """Devuelve el usuario dueño del token si es válido, no revocado y sigue aprobado (hereda su rol en el MCP)."""
     if not token or not token.startswith(PREFIJO_TOKEN_MCP):
         return None
     fila = s.scalars(select(TokenMcp).where(TokenMcp.hash == hash_token(token))).one_or_none()
     if fila is None or fila.revocado:
         return None
     u = s.scalars(select(Usuario).where(Usuario.email == fila.email)).one_or_none()
-    if u is None or u.rol != "admin" or u.estado != "aprobado":
+    if u is None or u.estado != "aprobado":
         return None
     fila.ultimo_uso = ahora()
     s.commit()
     return u
+
+
+def admin_por_token_mcp(s: Session, token: str | None) -> Usuario | None:
+    """Compatibilidad: solo si el token pertenece a un administrador aprobado."""
+    u = usuario_por_token_mcp(s, token)
+    return u if u is not None and u.rol == "admin" else None

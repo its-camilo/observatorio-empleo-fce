@@ -25,7 +25,7 @@ export const useEsAdmin = () => useContext(SesionCtx).sesion?.usuario.rol === "a
 
 const MENU: { a: string; texto: string; admin?: boolean }[] = [
   { a: "/", texto: "Inicio" },
-  { a: "/lanzar", texto: "Lanzar corrida" },
+  { a: "/lanzar", texto: "Lanzar corrida", admin: true },
   { a: "/ejecuciones", texto: "Ejecuciones y reportes" },
   { a: "/ofertas", texto: "Ofertas" },
   { a: "/rankings", texto: "Rankings y comparación" },
@@ -36,7 +36,7 @@ const MENU: { a: string; texto: string; admin?: boolean }[] = [
   { a: "/cursos", texto: "Cursos en tendencia" },
   { a: "/configuracion", texto: "Configuración" },
   { a: "/usuarios", texto: "Usuarios", admin: true },
-  { a: "/tokens-mcp", texto: "Tokens MCP", admin: true },
+  { a: "/tokens-mcp", texto: "Tokens MCP" },
 ];
 
 function Marco() {
@@ -94,7 +94,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route element={<Marco />}>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/lanzar" element={<LanzarCorrida />} />
+            <Route path="/lanzar" element={<SoloAdmin><LanzarCorrida /></SoloAdmin>} />
             <Route path="/ejecuciones" element={<Ejecuciones />} />
             <Route path="/ejecuciones/:id" element={<Ejecuciones />} />
             <Route path="/ofertas" element={<Ofertas />} />
@@ -106,7 +106,7 @@ function App() {
             <Route path="/cursos" element={<Cursos />} />
             <Route path="/configuracion" element={<Configuracion />} />
             <Route path="/usuarios" element={<SoloAdmin><Usuarios /></SoloAdmin>} />
-            <Route path="/tokens-mcp" element={<SoloAdmin><TokensMcp /></SoloAdmin>} />
+            <Route path="/tokens-mcp" element={<TokensMcp />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

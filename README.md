@@ -131,8 +131,8 @@ URL: `https://SU-DOMINIO/mcp` (transporte *Streamable HTTP*). Sin autenticación
 `listar_cortes`, `valores_filtro`, `buscar_ofertas_empleo`, `ver_oferta`, `ranking_software`, `comparar_cortes`,
 `resumen_corte`, `listar_catalogo`, `listar_ejecuciones`, `listar_cursos_tendencia`. No expone usuarios, validaciones ni configuración.
 
-Los administradores generan un **token personal** en el aplicativo (*Tokens MCP*); con la cabecera
-`Authorization: Bearer obs_...` aparecen además `lanzar_corrida(semestre, corte, modo)` y `estado_corrida(run_id)`.
+Cualquier usuario aprobado genera un **token personal** en *Tokens MCP*; hereda su rol vía
+`Authorization: Bearer obs_...` (`estado_corrida`; los admins también tienen `lanzar_corrida`).
 
 Sin token (solo lectura):
 
@@ -140,7 +140,7 @@ Sin token (solo lectura):
 { "mcpServers": { "observatorio-fce": { "url": "https://SU-DOMINIO/mcp" } } }
 ```
 
-Con token de administrador:
+Con token personal (admin incluye lanzar corrida):
 
 ```json
 { "mcpServers": { "observatorio-fce": { "url": "https://SU-DOMINIO/mcp",

@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from observatorio import analisis
-from observatorio.api.seguridad import get_db, usuario_actual
+from observatorio.api.seguridad import get_db, solo_admin, usuario_actual
 from observatorio.config import ajustes
 from observatorio.consultas import buscar_ofertas, listar_cursos, oferta_resumen, valores_filtros
 from observatorio.corridas import ErrorCorrida, ejecucion_dict, lanzar, progreso
@@ -36,7 +36,7 @@ class LanzarIn(BaseModel):
 
 
 @router.post("/corridas")
-def lanzar_corrida(d: LanzarIn, u: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
+def lanzar_corrida(d: LanzarIn, u: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
     try:
         e = lanzar(s, d.semestre, d.corte, u.email, d.modo)
     except (ErrorCorrida, ValueError) as ex:
@@ -173,7 +173,7 @@ def _estadisticas(items: list[Validacion]) -> dict:
 
 
 @router.post("/validacion/muestras")
-def crear_muestra(d: MuestraIn, u: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
+def crear_muestra(d: MuestraIn, _: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
     sem, cor = normalizar_semestre(d.semestre), normalizar_corte(d.corte)
     ids = [i for (i,) in s.execute(select(Oferta.id_oferta).where(Oferta.semestre == sem, Oferta.corte == cor))]
     if not ids:
@@ -211,7 +211,7 @@ def ver_muestra(muestra_id: str, _: Usuario = Depends(usuario_actual), s: Sessio
 
 
 @router.put("/validacion/items/{vid}")
-def revisar(vid: int, d: RevisionIn, u: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
+def revisar(vid: int, d: RevisionIn, u: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
     v = s.get(Validacion, vid)
     if v is None:
         raise HTTPException(404, "Elemento no encontrado")

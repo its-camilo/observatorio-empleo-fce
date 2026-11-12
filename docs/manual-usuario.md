@@ -22,9 +22,9 @@ Cada corrida se marca con **semestre** (ej. 2026-II) y **corte** (inicio, mitad 
 2. La primera vez su cuenta queda **pendiente**: pida a un administrador (uniic_bog@unal.edu.co o clagosm@unal.edu.co)
    que la apruebe en **Usuarios**. Luego vuelva a ingresar.
 
-## 3. Lanzar una corrida
+## 3. Lanzar una corrida (solo administradores)
 
-1. Menú **Lanzar corrida**.
+1. Menú **Lanzar corrida** (visible solo para administradores).
 2. Escriba el **semestre** (ej. `2026-II`), elija el **corte** y el **modo**:
    - **Completa**: la corrida real (puede tardar varias horas).
    - **Prueba**: pocas ofertas, termina en minutos; sirve para verificar que todo funciona.
@@ -106,8 +106,8 @@ Siga [powerbi/README.md](../powerbi/README.md) la primera vez. Después de cada 
 ## 15. Asistentes de IA (MCP)
 
 Cualquier persona puede consultar los datos públicos desde Claude, ChatGPT o Cursor agregando el servidor
-`https://SU-DOMINIO/mcp`. Los administradores pueden además lanzar corridas desde el asistente con un **token** que se
-genera en **Tokens MCP** (se muestra una sola vez; revóquelo si se pierde). Ver documentación técnica, sección 8.
+`https://SU-DOMINIO/mcp`. Cualquier usuario aprobado puede generar un **token** en **Tokens MCP** (se muestra una sola vez;
+revóquelo si se pierde): hereda su rol (consulta y `estado_corrida`; los admins también pueden lanzar corridas). Ver documentación técnica, sección 8.
 
 ## 16. Preguntas frecuentes
 

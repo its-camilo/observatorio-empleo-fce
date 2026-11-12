@@ -22,8 +22,8 @@ export default function TokensMcp() {
     <div className="space-y-4">
       <Titulo>Tokens del servidor MCP</Titulo>
       <Aviso>
-        El servidor MCP <code className="font-mono">{url}</code> es público y de solo lectura. Con un token personal de administrador
-        también aparecen las herramientas <b>lanzar_corrida</b> y <b>estado_corrida</b>. Envíe el token en la cabecera
+        El servidor MCP <code className="font-mono">{url}</code> es público y de solo lectura. Su token personal hereda su rol: con cuenta
+        de usuario aparece <b>estado_corrida</b>; los administradores además pueden usar <b>lanzar_corrida</b>. Envíe el token en la cabecera
         <code className="font-mono"> Authorization: Bearer &lt;token&gt;</code>. Revóquelo si se filtra.
       </Aviso>
       {err && <Aviso tipo="error">{err}</Aviso>}

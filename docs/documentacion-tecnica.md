@@ -176,13 +176,14 @@ aplica las mismas cautelas (pausas, sin login). Google Jobs suele no devolver da
 
 Documentación interactiva: `/api/docs`. Grupos principales:
 
-- `/api/auth/*` (Google, sesión), `/api/usuarios` (admin), `/api/tokens-mcp` (admin)
+- `/api/auth/*` (Google, sesión), `/api/usuarios` (admin), `/api/tokens-mcp` (cada usuario gestiona los suyos)
 - `/api/catalogo`, `/api/sinonimos`, `/api/terminos`, `/api/no-catalogados`, `/api/config` (lectura: usuarios; escritura: admin)
-- `/api/corridas` (lanzar, listar, progreso + reporte), `/api/ofertas` (filtros, detalle), `/api/analisis/*` (cortes, resumen, ranking, comparar), `/api/dashboard`
+- `/api/corridas` (listar y ver progreso: todos; lanzar: admin), `/api/ofertas` (filtros, detalle), `/api/analisis/*` (cortes, resumen, ranking, comparar), `/api/dashboard`
 - `/api/exportar/csv|excel` (sesión), `/api/publico/<tabla>.csv` (Power BI), `/api/validacion/*`, `/api/cursos`
 
-Roles: **admin** (catálogo, términos, configuración, usuarios, tokens MCP) y **usuario** aprobado (consultar, lanzar
-corridas, validar, exportar). Las cuentas nuevas quedan **pendientes** hasta que un admin las aprueba.
+Roles: **admin** (catálogo, términos, configuración, usuarios, lanzar corridas, validación manual, tokens MCP propios)
+y **usuario** aprobado (**solo lectura y descarga**: ofertas, rankings, ejecuciones/reportes, exportar, cursos; tokens MCP
+propios con permisos de lectura en el MCP). Las cuentas nuevas quedan **pendientes** hasta que un admin las aprueba.
 
 ## 8. Servidor MCP
 
@@ -193,16 +194,16 @@ su propio gestor, sin sesiones en memoria, apto para funciones serverless. Solo 
 - Herramientas públicas de solo lectura: `listar_cortes`, `valores_filtro`, `buscar_ofertas_empleo` (filtros carrera, semestre,
   corte, fuente, ciudad, software, texto, tipo; paginado, máx. 50 por página), `ver_oferta`, `ranking_software`,
   `comparar_cortes`, `resumen_corte`, `listar_catalogo`, `listar_ejecuciones`, `listar_cursos_tendencia`.
-- Herramientas de administración (solo con token de admin válido; si no, ni aparecen en `tools/list` y se rechazan):
-  `lanzar_corrida(semestre, corte, modo)` → dispara GitHub Actions igual que el botón; `estado_corrida(run_id)` → progreso y reporte.
+- Con token personal (cualquier usuario aprobado): `estado_corrida(run_id)` → progreso y reporte.
+- Solo con token de un **admin** aprobado además: `lanzar_corrida(semestre, corte, modo)` → dispara GitHub Actions. El token hereda el rol de quien lo creó.
 - Límites: 60 solicitudes/min por IP (`MCP_LIMITE_POR_MINUTO`; en Vercel cuenta por instancia, es un freno básico),
   descripciones recortadas a 2 000 caracteres, rankings ≤ 50, cursos ≤ 100, ejecuciones ≤ 50.
 - Nunca expone `usuarios`, `validaciones`, `tokens_mcp`, `config` ni `llm_cache`.
 
-### Token de administrador
+### Token personal
 Aplicativo → **Tokens MCP** → *Generar token* (se muestra una vez, formato `obs_...`). Se envía como
-`Authorization: Bearer obs_...`. Revóquelo desde la misma página. Solo usuarios con rol admin aprobados
-(por defecto `uniic_bog@unal.edu.co` y `clagosm@unal.edu.co`) pueden crearlos, y un token deja de servir si su dueño pierde el rol.
+`Authorization: Bearer obs_...`. Revóquelo desde la misma página. Cualquier usuario aprobado puede crear tokens;
+el token hereda su rol (lectura + `estado_corrida`, o lanzar corridas si es admin). Deja de servir si se revoca o el dueño pierde la aprobación.
 
 ### Conectarlo a asistentes
 
