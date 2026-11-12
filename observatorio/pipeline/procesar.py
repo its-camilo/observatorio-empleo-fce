@@ -62,7 +62,7 @@ class Procesador:
         llm_cfg = dict(cfg.get("llm") or {})
         if not usar_llm:
             llm_cfg["habilitado"] = False
-        self.llm = ClienteLLM(s, llm_cfg, cfg["carreras"])
+        self.llm = ClienteLLM(s, llm_cfg, cfg["carreras"], id_corrida=ejec.id_ejecucion)
         self.dedup_dias = int(cfg["dedup"].get("dias", 7))
         self.alcance = cfg["dedup"].get("alcance", "global")
         self.sufijo = "" if self.alcance == "global" else f"@{ejec.semestre}-{ejec.corte}"
