@@ -78,8 +78,16 @@ _CARGO_PROFESIONAL = (
 )
 
 
+def _titulo_normalizado_exclusion(cargo: str) -> str:
+    """Plegar y quitar marcadores de género (asesor/a, asesor(a), etc.)."""
+    t = plegar(cargo)
+    t = re.sub(r"\((?:a|o|as|os|e)\)", "", t)
+    t = re.sub(r"/(?:a|o)\b", "", t)
+    return f" {t} "
+
+
 def titulo_es_cargo_profesional(cargo: str) -> bool:
-    t = " " + plegar(cargo) + " "
+    t = _titulo_normalizado_exclusion(cargo)
     return any(_contiene(t, p) for p in _CARGO_PROFESIONAL)
 
 
@@ -87,7 +95,7 @@ def titulo_excluido_operativo(cargo: str, patrones: list[str]) -> bool:
     """Cargos operativos de bajo nivel que no deben contarse aunque coincidan con reglas amplias (p. ej. «administrativ»)."""
     if titulo_es_cargo_profesional(cargo):
         return False
-    t = " " + plegar(cargo) + " "
+    t = _titulo_normalizado_exclusion(cargo)
     return any(_contiene(t, p) for p in patrones)
 
 
