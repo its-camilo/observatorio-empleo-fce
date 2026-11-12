@@ -14,9 +14,9 @@ from collections import Counter
 from datetime import date
 
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from observatorio.db.crudas import asegurar_sesion_activa, commit_extraccion, insertar_cruda, ids_crudas_ejecucion_fuente
 from observatorio.db.modelos import Curso, Ejecucion, Oferta, OfertaCruda, Particion, TerminoBusqueda, ahora
 from observatorio.db.semilla import sembrar_todo
 from observatorio.parametros import leer_config
@@ -238,12 +238,13 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
              f" (objetivo {objetivo} crudas, cupo fuente {cupo_fuente})" if objetivo else "")
     detenido_por_tope = False
     for p in particiones:
-        if objetivo and contar_crudas_ejecucion(s, id_ejecucion) >= objetivo:
+        asegurar_sesion_activa(s)
+        if objetivo and _contar_sin_autoflush(s, lambda: contar_crudas_ejecucion(s, id_ejecucion)) >= objetivo:
             log.info("[%s] Objetivo de corrida alcanzado (%d ofertas crudas)", nombre, objetivo)
             resumen["tope_alcanzado"] = True
             detenido_por_tope = True
             break
-        if cupo_fuente and contar_crudas_fuente(s, id_ejecucion, fuente) >= cupo_fuente:
+        if cupo_fuente and _contar_sin_autoflush(s, lambda: contar_crudas_fuente(s, id_ejecucion, fuente)) >= cupo_fuente:
             log.info("[%s] Cupo de fuente alcanzado (%d ofertas crudas)", nombre, cupo_fuente)
             resumen["cupo_fuente_alcanzado"] = True
             detenido_por_tope = True
@@ -252,31 +253,47 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
             log.info("[%s] Se alcanzó el tiempo máximo; lo pendiente queda para la próxima reanudación", nombre)
             break
         nombre_u, lugar, remoto = p.ubicacion.split("|")
-        restante_global = (objetivo - contar_crudas_ejecucion(s, id_ejecucion)) if objetivo else max_part
-        restante_fuente = (cupo_fuente - contar_crudas_fuente(s, id_ejecucion, fuente)) if cupo_fuente else max_part
+        restante_global = (
+            objetivo - _contar_sin_autoflush(s, lambda: contar_crudas_ejecucion(s, id_ejecucion))
+        ) if objetivo else max_part
+        restante_fuente = (
+            cupo_fuente - _contar_sin_autoflush(s, lambda: contar_crudas_fuente(s, id_ejecucion, fuente))
+        ) if cupo_fuente else max_part
         max_res = max(1, min(max_part, restante_global, restante_fuente))
         c = Consulta(fuente=fuente, termino=p.termino, ubicacion=lugar, nombre_ubicacion=nombre_u, carrera=p.carrera,
                      remoto=bool(remoto), max_resultados=max_res, ventana_dias=int(cfg.get("ventana_dias", 30)))
         p.intentos += 1
+        conocidos |= ids_crudas_ejecucion_fuente(s, id_ejecucion, nombre)
         n = 0
         try:
             for o in extractor.extraer(c, lambda idf: idf in conocidos):
-                if objetivo and contar_crudas_ejecucion(s, id_ejecucion) >= objetivo:
+                asegurar_sesion_activa(s)
+                if objetivo and _contar_sin_autoflush(s, lambda: contar_crudas_ejecucion(s, id_ejecucion)) >= objetivo:
                     detenido_por_tope = True
                     resumen["tope_alcanzado"] = True
                     break
-                if cupo_fuente and contar_crudas_fuente(s, id_ejecucion, fuente) >= cupo_fuente:
+                if cupo_fuente and _contar_sin_autoflush(s, lambda: contar_crudas_fuente(s, id_ejecucion, fuente)) >= cupo_fuente:
                     detenido_por_tope = True
                     resumen["cupo_fuente_alcanzado"] = True
                     break
                 if o.id_fuente in conocidos:
                     continue
-                conocidos.add(o.id_fuente)
-                s.add(OfertaCruda(id_ejecucion=id_ejecucion, fuente=o.fuente, id_fuente=o.id_fuente, termino=p.termino,
-                                  carrera_termino=p.carrera, ubicacion=nombre_u, datos=o.a_dict()))
-                n += 1
-                if n % 25 == 0:
-                    s.commit()  # guardar lo ya extraído (RF-16)
+                if insertar_cruda(
+                    s,
+                    id_ejecucion=id_ejecucion,
+                    fuente=o.fuente,
+                    id_fuente=o.id_fuente,
+                    termino=p.termino,
+                    carrera_termino=p.carrera,
+                    ubicacion=nombre_u,
+                    datos=o.a_dict(),
+                ):
+                    conocidos.add(o.id_fuente)
+                    n += 1
+                    if n % 25 == 0:
+                        commit_extraccion(s)  # guardar lo ya extraído (RF-16)
+                else:
+                    conocidos.add(o.id_fuente)
             if detenido_por_tope:
                 p.estado = "hecha"
                 p.error = None
@@ -286,12 +303,14 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
                 p.error = None
                 resumen["hechas"] += 1
         except FuenteBloqueada as e:
+            asegurar_sesion_activa(s)
             p.estado = "error"
             p.error = explicar_error(fuente, e)
             resumen["bloqueada"] = True
             resumen["errores"] += 1
             log.warning("[%s] %s", nombre, p.error)
         except Exception as e:  # noqa: BLE001 - una consulta fallida no detiene las demás
+            asegurar_sesion_activa(s)
             p.estado = "error"
             p.error = explicar_error(fuente, e)
             resumen["errores"] += 1
@@ -299,10 +318,7 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
         p.ofertas += n
         p.omitidas = (p.omitidas or 0) + int(c.opciones.get("stats", {}).get("omitidas", 0))
         resumen["ofertas"] += n
-        try:
-            s.commit()
-        except IntegrityError:
-            s.rollback()
+        commit_extraccion(s)
         log.info("[%s] '%s' en %s: %d ofertas nuevas", nombre, p.termino, nombre_u, n)
         if detenido_por_tope:
             log.info("[%s] Objetivo de corrida alcanzado (%d ofertas crudas)", nombre, objetivo)
@@ -311,6 +327,11 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
             log.warning("[%s] Se detiene este fragmento para no insistir; se puede reanudar más tarde", nombre)
             break
     return resumen
+
+
+def _contar_sin_autoflush(s: Session, fn):
+    with s.no_autoflush:
+        return fn()
 
 
 # ---------------------------------------------------------------------------
@@ -328,9 +349,13 @@ def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mi
     if ejec is None:
         raise ValueError(f"No existe la ejecución {id_ejecucion}")
     ejec.fase = "procesando"
-    s.commit()
+    commit_extraccion(s)
     proc = Procesador(s, ejec, cfg, usar_llm=usar_llm)
-    proc.procesar_pendientes()
+    try:
+        proc.procesar_pendientes()
+    except Exception:
+        asegurar_sesion_activa(s)
+        raise
 
     # Mini corrida automática si no se llegó a la meta
     mini_cfg = cfg.get("mini_corrida") or {}
@@ -361,6 +386,7 @@ def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mi
                 extraer(s, id_ejecucion, f, max_minutos=restante / max(1, len(fuentes) - fuentes.index(f)), solo_mini=True)
             except Exception as e:  # noqa: BLE001
                 log.warning("Mini corrida en %s falló: %s", f, e)
+                asegurar_sesion_activa(s)
         ejec.fase = "procesando"
         s.commit()
         proc.procesar_pendientes()
