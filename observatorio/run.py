@@ -14,6 +14,7 @@ Pasos sueltos (los usa GitHub Actions):
     python -m observatorio.run reporte    --run-id ID
     python -m observatorio.run exportar   --semestre 2026-II --corte inicio --salida observatorio.xlsx
     python -m observatorio.run migrar     (crea/actualiza tablas con Alembic) | semilla
+    python -m observatorio.run purga-operativa [--aplicar]  (desactiva términos retirados; borra ofertas operativas)
 """
 from __future__ import annotations
 
@@ -23,7 +24,10 @@ import logging
 import os
 import sys
 
-ACCIONES = ("completa", "preparar", "extraer", "cursos", "consolidar", "reporte", "exportar", "migrar", "semilla")
+ACCIONES = (
+    "completa", "preparar", "extraer", "cursos", "consolidar", "reporte", "exportar", "migrar", "semilla",
+    "purga-operativa",
+)
 
 
 def configurar_logs() -> None:
@@ -96,6 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--ejecutado-por")
     p.add_argument("--salida", default="observatorio.xlsx")
     p.add_argument("--github-output", help="Archivo donde escribir la matriz (GitHub Actions)")
+    p.add_argument("--aplicar", action="store_true", help="Con purga-operativa: aplica cambios en la base (sin esto solo informa)")
     a = p.parse_args(argv)
 
     if a.accion == "migrar":
@@ -175,6 +180,37 @@ def main(argv: list[str] | None = None) -> int:
             with open(a.salida, "wb") as f:
                 f.write(a_excel(s, sem, cor))
             print(f"Archivo guardado: {a.salida}")
+            return 0
+        if a.accion == "purga-operativa":
+            from sqlalchemy import func, select
+
+            from observatorio.db.modelos import TerminoBusqueda
+            from observatorio.mantenimiento import (
+                TERMINOS_BUSQUEDA_RETIRADOS,
+                desactivar_terminos_retirados,
+                purgar_ofertas_operativas,
+            )
+
+            n_terms_activos = s.scalar(
+                select(func.count())
+                .select_from(TerminoBusqueda)
+                .where(TerminoBusqueda.termino.in_(TERMINOS_BUSQUEDA_RETIRADOS), TerminoBusqueda.activo.is_(True))
+            ) or 0
+            res = purgar_ofertas_operativas(s, aplicar=a.aplicar)
+            n_desactivados = desactivar_terminos_retirados(s) if a.aplicar else 0
+            print(
+                json.dumps(
+                    {
+                        "modo": "aplicar" if a.aplicar else "vista_previa",
+                        "terminos_retirados_activos": n_terms_activos,
+                        "terminos_desactivados": n_desactivados,
+                        **res,
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            if a.aplicar:
+                s.commit()
             return 0
     return 0
 
