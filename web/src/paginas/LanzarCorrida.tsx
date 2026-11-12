@@ -48,7 +48,8 @@ export default function LanzarCorrida() {
         <p className="mb-3 text-sm text-texto-suave">
           La corrida se ejecuta en GitHub Actions: busca ofertas en LinkedIn, Indeed, Google Jobs y Computrabajo (últimos 30 días), limpia,
           elimina duplicados, clasifica por carrera, detecta softwares y guarda todo en la base. El tope de descarga por corrida
-          (`limite_extraccion_corrida` en Configuración; 0 = sin tope) y la meta de relevantes guardadas (`meta_ofertas`) son parámetros distintos.
+          En Configuración, `objetivo_ofertas_corrida` define cuántas ofertas crudas recolectar (repartidas entre fuentes, LinkedIn primero)
+          y la meta de relevantes para la mini corrida.
           Si no llega a la meta y no hay tope de extracción, hace una mini corrida. Puede tardar varias horas; puede cerrar esta página.
         </p>
         <div className="flex flex-wrap items-end gap-3">

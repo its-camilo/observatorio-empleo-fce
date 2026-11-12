@@ -4,8 +4,8 @@ name: Corrida del Observatorio
 # (herramienta lanzar_corrida, solo admins) o a mano en Actions → "Run workflow".
 # Escribe directamente en Postgres (secreto DATABASE_URL).
 #
-# Flujo: preparar (crea la ejecución y las consultas) → extraer (trabajos en
-# paralelo por fuente y fragmento) + cursos → consolidar (limpieza, duplicados,
+# Flujo: preparar (crea la ejecución y las consultas) → extraer (secuencial:
+# LinkedIn primero, luego demás fuentes) + cursos → consolidar (limpieza, duplicados,
 # clasificación, softwares, mini corrida si no se llega a la meta, reporte).
 # Si algo se interrumpe, vuelva a lanzar con el MISMO run_id: retoma sin duplicar.
 
@@ -79,14 +79,10 @@ jobs:
             --github-output "$GITHUB_OUTPUT" $EXTRA
 
   extraer:
-    name: Extraer ${{ matrix.fuente }} ${{ matrix.fragmento }}
+    name: Extraer ofertas (LinkedIn primero)
     needs: preparar
     runs-on: ubuntu-latest
     timeout-minutes: 340
-    strategy:
-      fail-fast: false
-      max-parallel: 6
-      matrix: ${{ fromJson(needs.preparar.outputs.matriz) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -97,8 +93,7 @@ jobs:
       - run: pip install -r requirements-scraper.txt
       - name: Extraer ofertas
         run: |
-          python -m observatorio.run extraer --run-id "${{ needs.preparar.outputs.run_id }}" \
-            --fuente "${{ matrix.fuente }}" --fragmento ${{ matrix.fragmento }} --fragmentos ${{ matrix.fragmentos }} \
+          python -m observatorio.run extraer-secuencial --run-id "${{ needs.preparar.outputs.run_id }}" \
             --max-minutos 320
 
   cursos:

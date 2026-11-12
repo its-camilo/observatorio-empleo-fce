@@ -25,8 +25,8 @@ import os
 import sys
 
 ACCIONES = (
-    "completa", "preparar", "extraer", "cursos", "consolidar", "reporte", "exportar", "migrar", "semilla",
-    "purga-operativa",
+    "completa", "preparar", "extraer", "extraer-secuencial", "cursos", "consolidar", "reporte", "exportar",
+    "migrar", "semilla", "purga-operativa",
 )
 
 
@@ -151,6 +151,10 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if not a.run_id and a.accion != "exportar":
             p.error("Indique --run-id")
+        if a.accion == "extraer-secuencial":
+            resumenes = orq.extraer_secuencial(s, a.run_id, a.max_minutos)
+            print(json.dumps(resumenes, ensure_ascii=False))
+            return 0
         if a.accion == "extraer":
             if not a.fuente:
                 p.error("Indique --fuente")

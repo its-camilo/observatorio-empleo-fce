@@ -20,6 +20,12 @@ from sqlalchemy.orm import Session
 from observatorio.db.modelos import Curso, Ejecucion, Oferta, OfertaCruda, Particion, TerminoBusqueda, ahora
 from observatorio.db.semilla import sembrar_todo
 from observatorio.parametros import leer_config
+from observatorio.plan_extraccion import (
+    max_particiones_fuente,
+    objetivo_ofertas_corrida,
+    ordenar_fuentes,
+    presupuesto_por_fuente,
+)
 from observatorio.scraper.base import Consulta
 from observatorio.scraper.http import FuenteBloqueada, explicar_error
 
@@ -34,10 +40,20 @@ def contar_crudas_ejecucion(s: Session, id_ejecucion: str) -> int:
 
 
 def limite_extraccion_corrida(cfg: dict, ejec: Ejecucion) -> int:
-    """Tope global de ofertas crudas por corrida (0 = sin tope). Se congela en ejec.parametros al preparar."""
-    if ejec.parametros and "limite_extraccion_corrida" in ejec.parametros:
-        return int(ejec.parametros["limite_extraccion_corrida"] or 0)
-    return int(cfg.get("limite_extraccion_corrida") or 0)
+    """Alias histórico: objetivo de ofertas crudas por corrida (congelado en ejec.parametros al preparar)."""
+    return objetivo_ofertas_corrida(cfg, ejec.parametros)
+
+
+def contar_crudas_fuente(s: Session, id_ejecucion: str, fuente: str) -> int:
+    nombre = NOMBRES_FUENTE.get(fuente, fuente)
+    return int(
+        s.scalar(
+            select(func.count())
+            .select_from(OfertaCruda)
+            .where(OfertaCruda.id_ejecucion == id_ejecucion, OfertaCruda.fuente == nombre)
+        )
+        or 0
+    )
 
 
 def normalizar_corte(corte: str) -> str:
@@ -98,16 +114,21 @@ def preparar(s: Session, semestre: str, corte: str, id_ejecucion: str | None = N
     ejec.estado = "en_curso"
     ejec.fase = "preparada"
     ejec.inicio = ejec.inicio or ahora()
-    ejec.meta_ofertas = int(cfg.get("meta_ofertas", 10000))
-    limite_ext = int(cfg.get("limite_extraccion_corrida") or 0)
-    if limite_ext > 0:
-        ejec.parametros = {**(ejec.parametros or {}), "limite_extraccion_corrida": limite_ext}
+    objetivo = objetivo_ofertas_corrida(cfg, ejec.parametros)
+    ejec.meta_ofertas = objetivo
     if os.getenv("GITHUB_RUN_ID"):
         ejec.github_run_url = f"{os.getenv('GITHUB_SERVER_URL', 'https://github.com')}/{os.getenv('GITHUB_REPOSITORY')}/actions/runs/{os.getenv('GITHUB_RUN_ID')}"
 
     activas = [f for f, c in cfg["fuentes"].items() if c.get("activa")]
     if fuentes:
         activas = [f for f in activas if f in fuentes] or [f for f in fuentes if f in NOMBRES_FUENTE]
+    activas = ordenar_fuentes(activas)
+    presupuesto = presupuesto_por_fuente(objetivo, activas) if objetivo > 0 else {}
+    ejec.parametros = {
+        **(ejec.parametros or {}),
+        "objetivo_ofertas_corrida": objetivo,
+        "presupuesto_fuentes": presupuesto,
+    }
     ejec.fuentes = ", ".join(NOMBRES_FUENTE[f] for f in activas)
 
     terminos = list(s.scalars(select(TerminoBusqueda).where(TerminoBusqueda.activo.is_(True), TerminoBusqueda.tipo == "principal")
@@ -133,13 +154,27 @@ def preparar(s: Session, semestre: str, corte: str, id_ejecucion: str | None = N
 def crear_particiones(s: Session, ejec: Ejecucion, fuentes: list[str], terminos, ubicaciones: list[dict], cfg: dict,
                       mini: bool, max_por_particion: int | None = None) -> int:
     existentes = {(p.fuente, p.termino, p.ubicacion) for p in s.scalars(select(Particion).where(Particion.id_ejecucion == ejec.id_ejecucion))}
+    presupuesto = (ejec.parametros or {}).get("presupuesto_fuentes") or {}
+    fuentes_orden = ordenar_fuentes(fuentes)
+    consultas_por_fuente: dict[str, int] = {f: 0 for f in fuentes_orden}
     n = 0
-    for f in fuentes:
+    for f in fuentes_orden:
+        max_part_f = int(max_por_particion or cfg["fuentes"].get(f, {}).get("max_por_particion", 100))
+        cupo = presupuesto.get(f)
+        max_consultas = (
+            max_particiones_fuente(int(cupo), max_part_f)
+            if not mini and cupo is not None and int(cupo) > 0
+            else 10_000
+        )
         for t in terminos:
+            if consultas_por_fuente[f] >= max_consultas:
+                break
             permitidas = [x.strip() for x in (t.fuentes or "").split(",") if x.strip()]
             if permitidas and f not in permitidas:
                 continue
             for u in ubicaciones:
+                if consultas_por_fuente[f] >= max_consultas:
+                    break
                 lugar = u.get(f)
                 if lugar is None or (lugar == "" and f in ("linkedin", "indeed", "google")):
                     continue
@@ -149,6 +184,7 @@ def crear_particiones(s: Session, ejec: Ejecucion, fuentes: list[str], terminos,
                 s.add(Particion(id_ejecucion=ejec.id_ejecucion, fuente=f, termino=t.termino, carrera=t.carrera,
                                 ubicacion=clave_u, mini=mini, ofertas=0))
                 existentes.add((f, t.termino, clave_u))
+                consultas_por_fuente[f] += 1
                 n += 1
     if max_por_particion:
         ejec.parametros = {**(ejec.parametros or {}), "max_por_particion": max_por_particion}
@@ -157,9 +193,11 @@ def crear_particiones(s: Session, ejec: Ejecucion, fuentes: list[str], terminos,
 
 
 def matriz(s: Session, id_ejecucion: str) -> list[dict]:
-    """Trabajos paralelos para GitHub Actions: un elemento por fuente × fragmento."""
+    """Trabajos paralelos para GitHub Actions: un elemento por fuente × fragmento (LinkedIn primero)."""
     cfg = leer_config(s)
-    fuentes = [f for (f,) in s.execute(select(Particion.fuente).where(Particion.id_ejecucion == id_ejecucion).distinct())]
+    fuentes = ordenar_fuentes(
+        [f for (f,) in s.execute(select(Particion.fuente).where(Particion.id_ejecucion == id_ejecucion).distinct())]
+    )
     salida = []
     for f in fuentes:
         n = max(1, int(cfg["fuentes"].get(f, {}).get("fragmentos", 1)))
@@ -192,31 +230,44 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
     if cfg["dedup"].get("alcance", "global") == "global":
         conocidos |= set(s.scalars(select(Oferta.id_fuente).where(Oferta.fuente == nombre)))
     inicio = time.time()
-    tope = limite_extraccion_corrida(cfg, ejec)
+    objetivo = objetivo_ofertas_corrida(cfg, ejec.parametros)
+    cupo_fuente = int((ejec.parametros or {}).get("presupuesto_fuentes", {}).get(fuente) or 0)
     resumen = {"fuente": nombre, "particiones": len(particiones), "hechas": 0, "ofertas": 0, "errores": 0, "bloqueada": False,
-               "tope_extraccion": tope or None}
+               "objetivo_corrida": objetivo or None, "cupo_fuente": cupo_fuente or None}
     log.info("[%s] Fragmento %d/%d: %d consultas pendientes%s", nombre, fragmento + 1, fragmentos, len(particiones),
-             f" (tope global {tope} crudas)" if tope else "")
+             f" (objetivo {objetivo} crudas, cupo fuente {cupo_fuente})" if objetivo else "")
     detenido_por_tope = False
     for p in particiones:
-        if tope and contar_crudas_ejecucion(s, id_ejecucion) >= tope:
-            log.info("[%s] Tope global de extracción alcanzado (%d ofertas crudas)", nombre, tope)
+        if objetivo and contar_crudas_ejecucion(s, id_ejecucion) >= objetivo:
+            log.info("[%s] Objetivo de corrida alcanzado (%d ofertas crudas)", nombre, objetivo)
             resumen["tope_alcanzado"] = True
+            detenido_por_tope = True
+            break
+        if cupo_fuente and contar_crudas_fuente(s, id_ejecucion, fuente) >= cupo_fuente:
+            log.info("[%s] Cupo de fuente alcanzado (%d ofertas crudas)", nombre, cupo_fuente)
+            resumen["cupo_fuente_alcanzado"] = True
             detenido_por_tope = True
             break
         if max_minutos and (time.time() - inicio) / 60 > max_minutos:
             log.info("[%s] Se alcanzó el tiempo máximo; lo pendiente queda para la próxima reanudación", nombre)
             break
         nombre_u, lugar, remoto = p.ubicacion.split("|")
+        restante_global = (objetivo - contar_crudas_ejecucion(s, id_ejecucion)) if objetivo else max_part
+        restante_fuente = (cupo_fuente - contar_crudas_fuente(s, id_ejecucion, fuente)) if cupo_fuente else max_part
+        max_res = max(1, min(max_part, restante_global, restante_fuente))
         c = Consulta(fuente=fuente, termino=p.termino, ubicacion=lugar, nombre_ubicacion=nombre_u, carrera=p.carrera,
-                     remoto=bool(remoto), max_resultados=max_part, ventana_dias=int(cfg.get("ventana_dias", 30)))
+                     remoto=bool(remoto), max_resultados=max_res, ventana_dias=int(cfg.get("ventana_dias", 30)))
         p.intentos += 1
         n = 0
         try:
             for o in extractor.extraer(c, lambda idf: idf in conocidos):
-                if tope and contar_crudas_ejecucion(s, id_ejecucion) >= tope:
+                if objetivo and contar_crudas_ejecucion(s, id_ejecucion) >= objetivo:
                     detenido_por_tope = True
                     resumen["tope_alcanzado"] = True
+                    break
+                if cupo_fuente and contar_crudas_fuente(s, id_ejecucion, fuente) >= cupo_fuente:
+                    detenido_por_tope = True
+                    resumen["cupo_fuente_alcanzado"] = True
                     break
                 if o.id_fuente in conocidos:
                     continue
@@ -254,7 +305,7 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
             s.rollback()
         log.info("[%s] '%s' en %s: %d ofertas nuevas", nombre, p.termino, nombre_u, n)
         if detenido_por_tope:
-            log.info("[%s] Tope global de extracción alcanzado (%d ofertas crudas)", nombre, tope)
+            log.info("[%s] Objetivo de corrida alcanzado (%d ofertas crudas)", nombre, objetivo)
             break
         if resumen["bloqueada"]:
             log.warning("[%s] Se detiene este fragmento para no insistir; se puede reanudar más tarde", nombre)
@@ -284,15 +335,19 @@ def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mi
     # Mini corrida automática si no se llegó a la meta
     mini_cfg = cfg.get("mini_corrida") or {}
     total = total_corte(s, ejec.semestre, ejec.corte)
-    sin_tope_extraccion = limite_extraccion_corrida(cfg, ejec) <= 0
-    if permitir_mini and sin_tope_extraccion and ejec.modo == "completa" and mini_cfg.get("habilitada") and not ejec.mini_corrida \
-            and total < int(cfg.get("meta_ofertas", 10000)):
+    objetivo = objetivo_ofertas_corrida(cfg, ejec.parametros)
+    crudas = contar_crudas_ejecucion(s, id_ejecucion)
+    puede_mini = objetivo <= 0 or crudas >= objetivo
+    if permitir_mini and puede_mini and ejec.modo == "completa" and mini_cfg.get("habilitada") and not ejec.mini_corrida \
+            and total < (ejec.meta_ofertas or 0):
         log.info("Hay %d ofertas relevantes en el corte (meta %s): se inicia la mini corrida con términos ampliados",
-                 total, cfg.get("meta_ofertas"))
+                 total, ejec.meta_ofertas)
         ejec.mini_corrida = True
         ejec.fase = "mini_corrida"
         terminos = list(s.scalars(select(TerminoBusqueda).where(TerminoBusqueda.activo.is_(True), TerminoBusqueda.tipo == "ampliado")))
-        fuentes = [f for f in mini_cfg.get("fuentes", ["linkedin", "indeed", "computrabajo"]) if cfg["fuentes"].get(f, {}).get("activa")]
+        fuentes = ordenar_fuentes(
+            [f for f in mini_cfg.get("fuentes", ["linkedin", "indeed", "computrabajo"]) if cfg["fuentes"].get(f, {}).get("activa")]
+        )
         crear_particiones(s, ejec, fuentes, terminos, cfg["ubicaciones"], cfg, mini=True)
         ejec.terminos_usados = sorted(set(ejec.terminos_usados or []) | {f"{t.carrera}: {t.termino} (ampliado)" for t in terminos})
         s.commit()
@@ -364,11 +419,10 @@ def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:
     if pendientes:
         errores.append(f"Quedaron {pendientes} consultas sin hacer (tiempo agotado o fuente bloqueada). "
                        f"Puede reanudar la corrida con el mismo id: {ejec.id_ejecucion}.")
-    tope_ext = limite_extraccion_corrida(leer_config(s), ejec)
-    if tope_ext > 0 and crudas >= tope_ext:
-        errores.append(f"La extracción se detuvo al alcanzar el tope configurado de {tope_ext} ofertas crudas "
-                       f"(Configuración → limite_extraccion_corrida).")
-    elif ejec.total_corte < (ejec.meta_ofertas or 0) and ejec.modo == "completa" and tope_ext <= 0:
+    objetivo = objetivo_ofertas_corrida(leer_config(s), ejec.parametros)
+    if objetivo > 0 and crudas >= objetivo:
+        pass  # parada esperada por objetivo de extracción
+    elif ejec.total_corte < (ejec.meta_ofertas or 0) and ejec.modo == "completa" and crudas < objetivo:
         errores.append(f"El corte tiene {ejec.total_corte} ofertas relevantes; no alcanzó la meta de {ejec.meta_ofertas}.")
     ejec.errores_detalle = errores
     ejec.errores = "\n".join(errores) or None
@@ -415,13 +469,46 @@ def extraer_cursos_corrida(s: Session, id_ejecucion: str, terminos: list[str] | 
 # ---------------------------------------------------------------------------
 # Corrida completa en un solo proceso (CLI local y worker de servidor)
 # ---------------------------------------------------------------------------
+def extraer_secuencial(s: Session, id_ejecucion: str, max_minutos: float | None = None) -> list[dict]:
+    """Extrae fuente por fuente (LinkedIn primero), respetando el objetivo y cupos por fuente."""
+    cfg = leer_config(s)
+    ejec = s.get(Ejecucion, id_ejecucion)
+    if ejec is None:
+        raise ValueError(f"No existe la ejecución {id_ejecucion}")
+    fuentes = ordenar_fuentes(
+        [f for (f,) in s.execute(select(Particion.fuente).where(Particion.id_ejecucion == id_ejecucion).distinct())]
+    )
+    objetivo = objetivo_ofertas_corrida(cfg, ejec.parametros)
+    t0 = time.time()
+    resumenes: list[dict] = []
+    for f in fuentes:
+        if objetivo and contar_crudas_ejecucion(s, id_ejecucion) >= objetivo:
+            log.info("Objetivo de corrida alcanzado antes de %s", f)
+            break
+        restante = None
+        if max_minutos is not None:
+            restante = max_minutos - (time.time() - t0) / 60
+            if restante <= 0:
+                log.info("Tiempo máximo agotado antes de %s", f)
+                break
+        n_frag = max(1, int(cfg["fuentes"].get(f, {}).get("fragmentos", 1)))
+        detenido = False
+        for frag in range(n_frag):
+            r = extraer(s, id_ejecucion, f, frag, n_frag, max_minutos=restante)
+            resumenes.append(r)
+            if r.get("tope_alcanzado") or r.get("cupo_fuente_alcanzado") or r.get("bloqueada"):
+                detenido = True
+                break
+        if detenido or (objetivo and contar_crudas_ejecucion(s, id_ejecucion) >= objetivo):
+            break
+    return resumenes
+
+
 def correr_completa(s: Session, semestre: str, corte: str, id_ejecucion: str | None = None, ejecutado_por: str | None = None,
                     modo: str = "completa", fuentes: list[str] | None = None, limite_terminos: int | None = None,
                     limite_ubicaciones: int | None = None, max_por_particion: int | None = None, usar_llm: bool = True,
                     cursos: bool = True, ejecutor: str = "local", paralelo: bool = True) -> Ejecucion:
-    """Prepara, extrae todas las fuentes (en paralelo, una hebra por fuente) y consolida."""
-    from concurrent.futures import ThreadPoolExecutor
-
+    """Prepara, extrae todas las fuentes (LinkedIn primero; hebras solo entre fragmentos de una fuente) y consolida."""
     from observatorio.db.sesion import fabrica_sesiones
 
     ejec = preparar(s, semestre, corte, id_ejecucion, ejecutado_por, modo, fuentes, limite_terminos, limite_ubicaciones,
@@ -429,22 +516,45 @@ def correr_completa(s: Session, semestre: str, corte: str, id_ejecucion: str | N
     ejec.fase = "extrayendo"
     s.commit()
     idx = ejec.id_ejecucion
-    lista = [f for (f,) in s.execute(select(Particion.fuente).where(Particion.id_ejecucion == idx).distinct())]
+    lista = ordenar_fuentes(
+        [f for (f,) in s.execute(select(Particion.fuente).where(Particion.id_ejecucion == idx).distinct())]
+    )
     url = str(s.get_bind().url.render_as_string(hide_password=False))
 
     def una_fuente(f: str) -> dict:
         with fabrica_sesiones(url)() as s2:
             try:
-                return extraer(s2, idx, f)
+                cfg_f = leer_config(s2)["fuentes"].get(f, {})
+                fragmentos = max(1, int(cfg_f.get("fragmentos", 1)))
+                acum = {"fuente": NOMBRES_FUENTE[f], "particiones": 0, "hechas": 0, "ofertas": 0, "errores": 0}
+                for frag in range(fragmentos):
+                    r = extraer(s2, idx, f, frag, fragmentos)
+                    for k in ("particiones", "hechas", "ofertas", "errores"):
+                        acum[k] += r.get(k, 0)
+                    if r.get("tope_alcanzado") or r.get("cupo_fuente_alcanzado") or r.get("bloqueada"):
+                        acum.update({k: r[k] for k in ("tope_alcanzado", "cupo_fuente_alcanzado", "bloqueada") if k in r})
+                        break
+                return acum
             except Exception as e:  # noqa: BLE001 - cada fuente es independiente (RF-16)
                 log.error("[%s] falló: %s", f, e)
                 return {"fuente": f, "error": explicar_error(f, e)}
 
     if paralelo and len(lista) > 1:
-        with ThreadPoolExecutor(max_workers=len(lista)) as ex:
-            resumenes = list(ex.map(una_fuente, lista))
+        resumenes = []
+        for f in lista:
+            if objetivo_ofertas_corrida(leer_config(s), ejec.parametros) and contar_crudas_ejecucion(s, idx) >= objetivo_ofertas_corrida(
+                    leer_config(s), ejec.parametros):
+                break
+            resumenes.append(una_fuente(f))
+            s.expire_all()
     else:
-        resumenes = [una_fuente(f) for f in lista]
+        resumenes = []
+        for f in lista:
+            resumenes.append(una_fuente(f))
+            s.expire_all()
+            if objetivo_ofertas_corrida(leer_config(s), ejec.parametros) and contar_crudas_ejecucion(s, idx) >= objetivo_ofertas_corrida(
+                    leer_config(s), ejec.parametros):
+                break
     for r in resumenes:
         log.info("Resumen extracción: %s", r)
     s.expire_all()
