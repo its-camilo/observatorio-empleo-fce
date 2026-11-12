@@ -79,16 +79,16 @@ export default function Ofertas() {
       {error && <Aviso tipo="error">{error}</Aviso>}
       {datos && (
         <div className="tarjeta overflow-x-auto">
-          <div className="mb-2 text-sm text-slate-600">{datos.total.toLocaleString("es-CO")} ofertas {cargando && "· actualizando…"}</div>
+          <div className="mb-2 text-sm text-texto-suave">{datos.total.toLocaleString("es-CO")} ofertas {cargando && "· actualizando…"}</div>
           <table className="tabla">
             <thead><tr><th>Cargo</th><th>Empresa</th><th>Ciudad</th><th>Carrera</th><th>Tipo / nivel</th><th>Softwares</th><th>Fuente</th><th>Publicada</th></tr></thead>
             <tbody>
               {datos.items.map((o) => (
-                <tr key={o.id_oferta} className="cursor-pointer hover:bg-slate-50" onClick={() => setAbierta(o)}>
-                  <td className="font-medium">{o.cargo}</td><td>{o.empresa}</td><td>{o.ciudad}<div className="text-xs text-slate-500">{o.modalidad}</div></td>
+                <tr key={o.id_oferta} className="cursor-pointer hover:bg-niebla/20" onClick={() => setAbierta(o)}>
+                  <td className="font-medium">{o.cargo}</td><td>{o.empresa}</td><td>{o.ciudad}<div className="text-xs text-texto-suave">{o.modalidad}</div></td>
                   <td className="text-xs">{o.carrera}</td><td className="text-xs">{o.tipo_oferta}<br />{o.nivel_experiencia}</td>
                   <td>{o.softwares.map((s) => <span key={s} className="chip">{s}</span>)}</td>
-                  <td><a className="text-unal-oscuro underline" href={o.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{o.fuente}</a></td>
+                  <td><a className="text-institucional font-semibold underline" href={o.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{o.fuente}</a></td>
                   <td className="whitespace-nowrap text-xs">{o.fecha_publicacion}</td>
                 </tr>
               ))}
@@ -106,10 +106,10 @@ export default function Ofertas() {
           <div className="tarjeta max-h-[85vh] w-full max-w-3xl overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-2">
               <div><h2 className="text-lg font-semibold">{abierta.cargo}</h2>
-                <div className="text-sm text-slate-600">{abierta.empresa} · {abierta.ciudad} · {abierta.fuente} · {abierta.id_oferta}</div></div>
+                <div className="text-sm text-texto-suave">{abierta.empresa} · {abierta.ciudad} · {abierta.fuente} · {abierta.id_oferta}</div></div>
               <button className="btn-sec" onClick={() => setAbierta(null)}>Cerrar</button>
             </div>
-            <a className="text-sm text-unal-oscuro underline" href={abierta.url} target="_blank" rel="noreferrer">Abrir oferta original</a>
+            <a className="text-sm text-institucional font-semibold underline" href={abierta.url} target="_blank" rel="noreferrer">Abrir oferta original</a>
             {!detalle ? <Cargando /> : (
               <>
                 <div className="mt-3 text-sm">
@@ -117,7 +117,7 @@ export default function Ofertas() {
                   {detalle.detecciones?.length ? detalle.detecciones.map((d) => <span key={d.software} className="chip" title={d.grupo}>{d.software} ← “{d.texto_encontrado}”</span>) : "ninguno"}
                 </div>
                 {detalle.idiomas && <div className="text-sm"><b>Idiomas:</b> {detalle.idiomas}</div>}
-                <pre className="mt-3 whitespace-pre-wrap font-sans text-sm text-slate-700">{detalle.descripcion}</pre>
+                <pre className="mt-3 whitespace-pre-wrap font-sans text-sm text-texto-suave">{detalle.descripcion}</pre>
               </>
             )}
           </div>

@@ -27,7 +27,7 @@ export default function Dashboard() {
   const r = datos.resumen;
   return (
     <div>
-      <Titulo extra={admin ? <Link className="btn" to="/lanzar">Lanzar corrida</Link> : undefined}>Inicio</Titulo>
+      <Titulo extra={admin ? <Link className="btn-cta" to="/lanzar">Lanzar corrida</Link> : undefined}>Inicio</Titulo>
       {!r && (
         <Aviso>{admin ? "Aún no hay ofertas. Lance la primera corrida desde “Lanzar corrida”." : "Aún no hay ofertas en el observatorio."}</Aviso>
       )}
@@ -40,25 +40,25 @@ export default function Dashboard() {
       {r && (
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="tarjeta">
-            <h2 className="mb-2 font-semibold">Top 10 softwares (% de ofertas)</h2>
+            <h2 className="mb-2 font-titulo text-lg font-extrabold uppercase text-marina">Top 10 softwares (% de ofertas)</h2>
             <Barras datos={r.top_softwares.map((x) => ({ etiqueta: x.software, valor: x.porcentaje }))} sufijo=" %" />
           </div>
           <div className="tarjeta space-y-4">
-            <div><h2 className="mb-2 font-semibold">Por carrera</h2><Barras datos={aBarras(r.por_carrera)} /></div>
-            <div><h2 className="mb-2 font-semibold">Por fuente</h2><Barras datos={aBarras(r.por_fuente)} /></div>
-            <div><h2 className="mb-2 font-semibold">Práctica vs. empleo</h2><Barras datos={aBarras(r.por_tipo_oferta)} /></div>
+            <div><h2 className="mb-2 font-titulo text-lg font-extrabold uppercase text-marina">Por carrera</h2><Barras datos={aBarras(r.por_carrera)} /></div>
+            <div><h2 className="mb-2 font-titulo text-lg font-extrabold uppercase text-marina">Por fuente</h2><Barras datos={aBarras(r.por_fuente)} /></div>
+            <div><h2 className="mb-2 font-titulo text-lg font-extrabold uppercase text-marina">Práctica vs. empleo</h2><Barras datos={aBarras(r.por_tipo_oferta)} /></div>
           </div>
         </div>
       )}
       {admin && datos.ultimas_corridas.length > 0 && (
         <div className="tarjeta mt-4">
-          <h2 className="mb-2 font-semibold">Últimas corridas</h2>
+          <h2 className="mb-2 font-titulo text-lg font-extrabold uppercase text-marina">Últimas corridas</h2>
           <table className="tabla">
             <thead><tr><th>Ejecución</th><th>Corte</th><th>Estado</th><th>Guardadas</th><th>Por</th></tr></thead>
             <tbody>
               {datos.ultimas_corridas.map((e) => (
                 <tr key={e.id_ejecucion}>
-                  <td><Link className="text-unal-oscuro underline" to={`/ejecuciones/${e.id_ejecucion}`}>{e.id_ejecucion}</Link></td>
+                  <td><Link className="text-institucional font-semibold underline" to={`/ejecuciones/${e.id_ejecucion}`}>{e.id_ejecucion}</Link></td>
                   <td>{e.semestre} · {e.corte}</td>
                   <td><EstadoChip estado={e.estado} /></td>
                   <td>{e.ofertas_guardadas}</td>

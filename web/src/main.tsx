@@ -39,6 +39,26 @@ const MENU: { a: string; texto: string; admin?: boolean }[] = [
   { a: "/tokens-mcp", texto: "Tokens MCP" },
 ];
 
+function PieInstitucional() {
+  return (
+    <footer className="pie-institucional">
+      <div className="block space-y-0.5 text-center md:text-left">
+        <span className="block">Facultad de Ciencias Económicas</span>
+        <span className="block">Unidad de Informática (UIFCE)</span>
+        <span className="block">Universidad Nacional de Colombia — Sede Bogotá</span>
+      </div>
+      <a
+        href="https://www.unal.edu.co"
+        target="_blank"
+        rel="noreferrer"
+        className="mt-3 block text-center font-titulo text-xs font-bold uppercase tracking-widest text-white md:mt-0 md:border-l md:border-white/40 md:pl-6 md:text-right"
+      >
+        UNAL
+      </a>
+    </footer>
+  );
+}
+
 function Marco() {
   const { sesion, setSesion } = useSesion();
   const navegar = useNavigate();
@@ -48,37 +68,65 @@ function Marco() {
     setSesion(null);
     navegar("/login");
   };
+  const enlaces = MENU.filter((m) => !m.admin || sesion.usuario.rol === "admin");
   return (
-    <div className="min-h-screen md:flex">
-      <aside className={`${abierto ? "block" : "hidden"} w-full bg-tinta text-slate-100 md:block md:w-60 md:shrink-0`}>
-        <div className="px-4 py-4">
-          <div className="text-xs uppercase tracking-widest text-unal">UIFCE · UNAL</div>
-          <div className="font-semibold">Observatorio de Empleo FCE</div>
+    <div className="shell-institucional">
+      <div className="shell-card md:flex-row">
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          <aside
+            className={`${
+              abierto ? "block" : "hidden"
+            } shrink-0 bg-institucional text-white md:flex md:w-64 md:flex-col`}
+          >
+            <div className="border-b border-white/15 px-5 py-5">
+              <div className="font-titulo text-xs font-extrabold uppercase tracking-widest text-acento">UIFCE · 2026</div>
+              <div className="mt-1 font-titulo text-sm font-extrabold uppercase leading-tight text-white">
+                Observatorio de Empleo FCE
+              </div>
+            </div>
+            <nav className="max-h-[50vh] overflow-y-auto px-2 py-3 md:max-h-none md:flex-1">
+              {enlaces.map((m) => (
+                <NavLink
+                  key={m.a}
+                  to={m.a}
+                  end={m.a === "/"}
+                  onClick={() => setAbierto(false)}
+                  className={({ isActive }) => `nav-link ${isActive ? "nav-link-activo" : ""}`}
+                >
+                  {m.texto}
+                </NavLink>
+              ))}
+            </nav>
+            <div className="border-t border-white/15 px-4 py-4 text-xs text-white/80">
+              <div className="truncate font-semibold">{sesion.usuario.email}</div>
+              <div className="text-acento">{sesion.usuario.rol === "admin" ? "Administrador" : "Usuario"}</div>
+              <button type="button" className="mt-2 font-semibold underline decoration-acento underline-offset-2" onClick={salir}>
+                Cerrar sesión
+              </button>
+            </div>
+          </aside>
+          <main className="min-w-0 flex-1 overflow-auto p-5 md:p-8 md:pl-6">
+            <div className="mb-4 flex items-center justify-between gap-2 md:hidden">
+              <span className="font-titulo text-xs font-bold uppercase text-marina">Menú</span>
+              <button type="button" className="btn-sec text-xs" onClick={() => setAbierto(!abierto)}>
+                {abierto ? "Cerrar" : "Abrir"}
+              </button>
+            </div>
+            <Outlet />
+          </main>
         </div>
-        <nav className="px-2 pb-4">
-          {MENU.filter((m) => !m.admin || sesion.usuario.rol === "admin").map((m) => (
-            <NavLink key={m.a} to={m.a} end={m.a === "/"} onClick={() => setAbierto(false)}
-              className={({ isActive }) => `block rounded-md px-3 py-1.5 text-sm ${isActive ? "bg-unal-oscuro text-white" : "text-slate-300 hover:bg-slate-700"}`}>
-              {m.texto}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="border-t border-slate-700 px-4 py-3 text-xs text-slate-400">
-          <div className="truncate">{sesion.usuario.email}</div>
-          <div>{sesion.usuario.rol === "admin" ? "Administrador" : "Usuario"}</div>
-          <button className="mt-2 underline" onClick={salir}>Cerrar sesión</button>
-        </div>
-      </aside>
-      <main className="flex-1 p-4 md:p-6">
-        <button className="btn-sec mb-3 md:hidden" onClick={() => setAbierto(!abierto)}>Menú</button>
-        <Outlet />
-      </main>
+      </div>
+      <PieInstitucional />
     </div>
   );
 }
 
 function SoloAdmin({ children }: { children: React.ReactNode }) {
-  return useEsAdmin() ? <>{children}</> : <p className="text-sm text-slate-600">Solo los administradores pueden ver esta página.</p>;
+  return useEsAdmin() ? (
+    <>{children}</>
+  ) : (
+    <p className="text-sm text-texto-suave">Solo los administradores pueden ver esta página.</p>
+  );
 }
 
 function App() {

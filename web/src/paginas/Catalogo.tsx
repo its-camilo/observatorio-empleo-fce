@@ -26,7 +26,7 @@ function FilaSoftware({ sw, admin, recargar }: { sw: Software; admin: boolean; r
         <td><button className="btn-sec" onClick={() => setAbierto(!abierto)}>{abierto ? "Cerrar" : admin ? "Editar" : "Ver"}</button></td>
       </tr>
       {abierto && (
-        <tr><td colSpan={5} className="bg-slate-50">
+        <tr><td colSpan={5} className="bg-niebla/20">
           {error && <Aviso tipo="error">{error}</Aviso>}
           <div className="grid gap-2 md:grid-cols-4">
             <div><label className="etiqueta">Nombre estándar</label><input className="campo w-full" disabled={!admin} value={edit.software} onChange={(e) => setEdit({ ...edit, software: e.target.value })} /></div>

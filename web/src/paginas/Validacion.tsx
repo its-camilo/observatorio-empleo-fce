@@ -39,7 +39,7 @@ function Revision({ id, alCambiar, admin }: { id: string; alCambiar: () => void;
         <div className="tarjeta">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div><b>{i + 1}/{datos.items.length}.</b> {item.oferta.cargo} · {item.oferta.empresa}{" "}
-              <a className="text-sm text-unal-oscuro underline" href={item.oferta.url} target="_blank" rel="noreferrer">original</a>
+              <a className="text-sm text-institucional font-semibold underline" href={item.oferta.url} target="_blank" rel="noreferrer">original</a>
               {item.resultado && <span className="chip ml-2">marcada: {item.resultado}</span>}</div>
             <div className="flex gap-1">
               <button className="btn-sec" disabled={i === 0} onClick={() => setI(i - 1)}>Anterior</button>
@@ -47,7 +47,7 @@ function Revision({ id, alCambiar, admin }: { id: string; alCambiar: () => void;
             </div>
           </div>
           <div className="text-sm"><b>Softwares detectados:</b> {item.oferta.detecciones.length ? item.oferta.detecciones.map((d) => <span key={d.software} className="chip">{d.software} ← “{d.texto_encontrado}”</span>) : "ninguno"}</div>
-          <pre className="mt-2 max-h-80 overflow-y-auto whitespace-pre-wrap rounded bg-slate-50 p-2 font-sans text-sm">{item.oferta.descripcion}</pre>
+          <pre className="mt-2 max-h-80 overflow-y-auto whitespace-pre-wrap rounded bg-niebla/20 p-2 font-sans text-sm">{item.oferta.descripcion}</pre>
           {admin ? (
             <>
               <div className="mt-2 grid gap-2 md:grid-cols-3">
@@ -57,11 +57,11 @@ function Revision({ id, alCambiar, admin }: { id: string; alCambiar: () => void;
               </div>
               <div className="mt-2 flex gap-2">
                 <button className="btn" onClick={() => marcar("correcto")}>Correcto</button>
-                <button className="btn-sec border-red-300 text-red-700" onClick={() => marcar("incorrecto")}>Incorrecto</button>
+                <button type="button" className="btn-sec" onClick={() => marcar("incorrecto")}>Incorrecto</button>
               </div>
             </>
           ) : (
-            <p className="mt-2 text-sm text-slate-600">Solo los administradores pueden registrar revisiones. Puede consultar esta muestra en modo lectura.</p>
+            <p className="mt-2 text-sm text-texto-suave">Solo los administradores pueden registrar revisiones. Puede consultar esta muestra en modo lectura.</p>
           )}
         </div>
       )}
@@ -103,7 +103,7 @@ export default function Validacion() {
             <thead><tr><th>Muestra</th><th>Corte</th><th>Validadas</th><th>Precisión</th><th /></tr></thead>
             <tbody>{muestras.map((m) => (
               <tr key={m.muestra_id}><td className="text-xs">{m.muestra_id}</td><td>{m.semestre} · {m.corte}</td><td>{m.validados}/{m.total}</td>
-                <td className={m.precision == null ? "" : m.precision >= m.meta ? "text-green-700" : "text-red-700"}>{m.precision == null ? "—" : `${m.precision} %`}</td>
+                <td className={m.precision == null ? "" : m.precision >= m.meta ? "text-institucional font-semibold" : "text-marina font-semibold"}>{m.precision == null ? "—" : `${m.precision} %`}</td>
                 <td><button className="btn-sec" onClick={() => setActiva(m.muestra_id)}>Revisar</button></td></tr>
             ))}</tbody>
           </table>

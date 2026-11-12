@@ -45,7 +45,7 @@ export default function LanzarCorrida() {
     <div className="space-y-4">
       <Titulo>Lanzar corrida</Titulo>
       <div className="tarjeta max-w-2xl">
-        <p className="mb-3 text-sm text-slate-600">
+        <p className="mb-3 text-sm text-texto-suave">
           La corrida se ejecuta en GitHub Actions: busca ofertas en LinkedIn, Indeed, Google Jobs y Computrabajo (últimos 30 días), limpia,
           elimina duplicados, clasifica por carrera, detecta softwares y guarda todo en la base. Si no llega a la meta de ofertas, hace sola
           una mini corrida con términos más variados. Puede tardar varias horas; puede cerrar esta página.
@@ -63,12 +63,12 @@ export default function LanzarCorrida() {
             </select></div>
           <button className="btn" disabled={enviando || !!enMarcha} onClick={lanzar}>{enviando ? "Enviando…" : "Lanzar"}</button>
         </div>
-        {enMarcha && <p className="mt-2 text-xs text-slate-500">Hay una corrida en marcha; espere a que termine para lanzar otra.</p>}
+        {enMarcha && <p className="mt-2 text-xs text-texto-suave">Hay una corrida en marcha; espere a que termine para lanzar otra.</p>}
         {error && <div className="mt-3"><Aviso tipo="error">{error}</Aviso></div>}
       </div>
       {actual && (
         <>
-          <div className="text-sm">Corrida <Link className="text-unal-oscuro underline" to={`/ejecuciones/${actual.id_ejecucion}`}>{actual.id_ejecucion}</Link></div>
+          <div className="text-sm">Corrida <Link className="text-institucional font-semibold underline" to={`/ejecuciones/${actual.id_ejecucion}`}>{actual.id_ejecucion}</Link></div>
           {actual.progreso && <PanelProgreso p={actual.progreso} />}
           {!enMarcha && <Reporte e={actual} />}
         </>

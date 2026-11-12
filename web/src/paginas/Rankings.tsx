@@ -11,7 +11,7 @@ type Comparacion = {
   advertencias: string[];
 };
 const CARRERAS = ["", "Administración de Empresas", "Contaduría Pública", "Economía"];
-const COLOR: Record<string, string> = { "subió": "text-green-700", "bajó": "text-red-700", nuevo: "text-sky-700", "desapareció": "text-slate-500", igual: "text-slate-600" };
+const COLOR: Record<string, string> = { "subió": "text-institucional", "bajó": "text-marina", nuevo: "text-acento", "desapareció": "text-texto-suave", igual: "text-texto-suave" };
 
 export default function Rankings() {
   const { datos: cortes, error } = useDatos<Corte[]>("/analisis/cortes");
@@ -57,7 +57,7 @@ export default function Rankings() {
               <tbody>{rk.ranking.map((r) => (
                 <tr key={r.software}><td>{r.posicion}</td><td className="font-medium">{r.software}</td><td className="text-xs">{r.grupo}</td><td>{r.ofertas}</td>
                   <td>{r.porcentaje.toFixed(1)} %</td>
-                  <td className={r.variacion_pp == null ? "text-slate-400" : r.variacion_pp >= 0 ? "text-green-700" : "text-red-700"}>
+                  <td className={r.variacion_pp == null ? "text-texto-suave/70" : r.variacion_pp >= 0 ? "text-institucional" : "text-marina"}>
                     {r.variacion_pp == null ? (r.corte_anterior ? "nuevo" : "—") : `${r.variacion_pp > 0 ? "+" : ""}${r.variacion_pp.toFixed(1)} pp`}</td></tr>
               ))}</tbody>
             </table>
@@ -75,7 +75,7 @@ export default function Rankings() {
         {cmp && (
           <>
             {cmp.advertencias.map((x) => <Aviso key={x} tipo="alerta">{x}</Aviso>)}
-            <p className="mb-2 text-xs text-slate-500">A: {cmp.corte_a.total_ofertas} ofertas ({cmp.corte_a.fuentes.join(", ")}) · B: {cmp.corte_b.total_ofertas} ofertas ({cmp.corte_b.fuentes.join(", ")})</p>
+            <p className="mb-2 text-xs text-texto-suave">A: {cmp.corte_a.total_ofertas} ofertas ({cmp.corte_a.fuentes.join(", ")}) · B: {cmp.corte_b.total_ofertas} ofertas ({cmp.corte_b.fuentes.join(", ")})</p>
             <table className="tabla">
               <thead><tr><th>Software</th><th>Grupo</th><th>% A</th><th>% B</th><th>Variación</th><th>Estado</th></tr></thead>
               <tbody>{cmp.softwares.map((r) => (
