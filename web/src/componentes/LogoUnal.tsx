@@ -1,19 +1,20 @@
 type Props = {
-  /** `oscuro` = fondo oscuro/azul (logo blanco). `claro` = fondo claro (logo negro). */
-  variante?: "oscuro" | "claro";
   className?: string;
 };
 
-export default function LogoUnal({ variante = "claro", className = "" }: Props) {
-  const src = variante === "oscuro" ? "/logo-unal-blanco.png" : "/logo-unal.png";
+/** Logo institucional UNAL: blanco sobre transparente (usar sobre fondo oscuro #042361). */
+export default function LogoUnal({ className = "" }: Props) {
   return (
-    <img
-      src={src}
-      alt="Universidad Nacional de Colombia"
-      className={`h-8 w-auto max-w-[min(220px,55vw)] object-contain object-left md:h-11 md:max-w-[280px] ${className}`}
-      width={1024}
-      height={438}
-      decoding="async"
-    />
+    <picture>
+      <source type="image/webp" srcSet="/logo-unal-blanco.webp" />
+      <img
+        src="/logo-unal-blanco.png"
+        alt="Universidad Nacional de Colombia"
+        className={`h-8 w-auto max-w-[min(220px,55vw)] object-contain object-left md:h-11 md:max-w-[280px] ${className}`}
+        width={600}
+        height={255}
+        decoding="async"
+      />
+    </picture>
   );
 }

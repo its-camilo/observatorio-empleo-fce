@@ -52,10 +52,10 @@ function PieInstitucional() {
         href="https://www.unal.edu.co"
         target="_blank"
         rel="noreferrer"
-        className="mt-3 flex justify-center md:mt-0 md:border-l md:border-white/40 md:pl-6 md:justify-end"
+        className="marca-unal mt-3 md:mt-0 md:ml-6 md:shrink-0"
         aria-label="Universidad Nacional de Colombia (sitio web)"
       >
-        <LogoUnal variante="oscuro" className="object-center md:object-right" />
+        <LogoUnal className="object-center md:object-right" />
       </a>
     </footer>
   );

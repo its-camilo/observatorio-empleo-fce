@@ -70,12 +70,18 @@ export default function Login() {
   };
 
   return (
-    <div className="shell-institucional flex min-h-screen flex-col items-center justify-center">
+    <div className="shell-institucional relative flex min-h-screen flex-col items-center justify-center">
+      <a
+        href="https://www.unal.edu.co"
+        target="_blank"
+        rel="noreferrer"
+        className="marca-unal absolute right-3 top-3 z-20 md:right-6 md:top-6"
+        aria-label="Universidad Nacional de Colombia (sitio web)"
+      >
+        <LogoUnal className="object-center" />
+      </a>
       <div className="shell-card w-full max-w-lg p-8 text-center md:p-12">
-        <div className="flex flex-col items-center gap-2">
-          <LogoUnal variante="claro" className="mx-auto object-center" />
-          <div className="font-titulo text-sm font-extrabold uppercase tracking-widest text-acento">UIFCE</div>
-        </div>
+        <div className="font-titulo text-sm font-extrabold uppercase tracking-widest text-acento">UIFCE</div>
         <h1 className="mt-2 font-titulo text-2xl font-extrabold uppercase leading-tight text-marina md:text-3xl">
           Observatorio de Empleo FCE
         </h1>
