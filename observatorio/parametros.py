@@ -22,21 +22,28 @@ POR_DEFECTO: dict[str, dict[str, Any]] = {
         "valor": {
             "linkedin": {"activa": True, "max_por_particion": 100, "retraso_segundos": [2.5, 5.0], "fragmentos": 4},
             "indeed": {"activa": True, "max_por_particion": 100, "retraso_segundos": [2.0, 4.0], "fragmentos": 2},
-            "google": {"activa": True, "max_por_particion": 50, "retraso_segundos": [3.0, 6.0], "fragmentos": 1},
             "computrabajo": {"activa": True, "max_por_particion": 60, "max_paginas": 3, "retraso_segundos": [2.0, 4.0], "fragmentos": 2},
         },
         "descripcion": "Fuentes de ofertas: activar/desactivar, máximo de ofertas por término y ciudad, pausas entre consultas y número de trabajos paralelos en GitHub Actions.",
     },
+    "distribucion_fuentes": {
+        "valor": {"linkedin": 42, "indeed": 30, "computrabajo": 28},
+        "descripcion": "Porcentaje del objetivo de extracción (ofertas crudas) por fuente. Debe sumar 100. 0 % desactiva la fuente en corridas nuevas.",
+    },
+    "distribucion_carreras": {
+        "valor": {"Administración de Empresas": 34, "Contaduría Pública": 33, "Economía": 33},
+        "descripcion": "Porcentaje del objetivo de extracción repartido entre carreras (por término de búsqueda). Debe sumar 100.",
+    },
     "ubicaciones": {
         "valor": [
-            {"nombre": "Bogotá", "linkedin": "Bogotá, Colombia", "indeed": "Bogotá", "google": "Bogotá, Colombia", "computrabajo": "bogota-dc"},
-            {"nombre": "Medellín", "linkedin": "Medellín, Antioquia, Colombia", "indeed": "Medellín", "google": "Medellín, Colombia", "computrabajo": "antioquia"},
-            {"nombre": "Cali", "linkedin": "Cali, Valle del Cauca, Colombia", "indeed": "Cali", "google": "Cali, Colombia", "computrabajo": "valle-del-cauca"},
-            {"nombre": "Barranquilla", "linkedin": "Barranquilla, Atlántico, Colombia", "indeed": "Barranquilla", "google": "Barranquilla, Colombia", "computrabajo": "atlantico"},
-            {"nombre": "Bucaramanga", "linkedin": "Bucaramanga, Santander, Colombia", "indeed": "Bucaramanga", "google": "Bucaramanga, Colombia", "computrabajo": "santander"},
-            {"nombre": "Cartagena", "linkedin": "Cartagena, Bolívar, Colombia", "indeed": "Cartagena", "google": "", "computrabajo": ""},
-            {"nombre": "Pereira", "linkedin": "Pereira, Risaralda, Colombia", "indeed": "Pereira", "google": "", "computrabajo": ""},
-            {"nombre": "Remoto Colombia", "linkedin": "Colombia", "indeed": "Colombia", "google": "Colombia", "computrabajo": "", "remoto": True},
+            {"nombre": "Bogotá", "linkedin": "Bogotá, Colombia", "indeed": "Bogotá", "computrabajo": "bogota-dc"},
+            {"nombre": "Medellín", "linkedin": "Medellín, Antioquia, Colombia", "indeed": "Medellín", "computrabajo": "antioquia"},
+            {"nombre": "Cali", "linkedin": "Cali, Valle del Cauca, Colombia", "indeed": "Cali", "computrabajo": "valle-del-cauca"},
+            {"nombre": "Barranquilla", "linkedin": "Barranquilla, Atlántico, Colombia", "indeed": "Barranquilla", "computrabajo": "atlantico"},
+            {"nombre": "Bucaramanga", "linkedin": "Bucaramanga, Santander, Colombia", "indeed": "Bucaramanga", "computrabajo": "santander"},
+            {"nombre": "Cartagena", "linkedin": "Cartagena, Bolívar, Colombia", "indeed": "Cartagena", "computrabajo": ""},
+            {"nombre": "Pereira", "linkedin": "Pereira, Risaralda, Colombia", "indeed": "Pereira", "computrabajo": ""},
+            {"nombre": "Remoto Colombia", "linkedin": "Colombia", "indeed": "Colombia", "computrabajo": "", "remoto": True},
         ],
         "descripcion": "Ciudades a consultar y cómo se escribe cada una en cada fuente (vacío = no se consulta en esa fuente).",
     },
@@ -44,8 +51,8 @@ POR_DEFECTO: dict[str, dict[str, Any]] = {
     "tipo_oferta": {"valor": "ambas", "descripcion": "practica, empleo o ambas."},
     "objetivo_ofertas_corrida": {
         "valor": 10000,
-        "descripcion": "Número de ofertas crudas a recolectar en cada corrida. El orquestador reparte este cupo entre "
-                       "fuentes (más en LinkedIn, consultando LinkedIn primero) y detiene la extracción al alcanzarlo. "
+        "descripcion": "Número de ofertas crudas a recolectar en cada corrida. El orquestador reparte este cupo según "
+                       "distribucion_fuentes y distribucion_carreras (LinkedIn primero) y detiene la extracción al alcanzarlo. "
                        "También define la meta de relevantes guardadas para la mini corrida. "
                        "max_por_particion en «fuentes» sigue siendo el tope por consulta (término × ciudad).",
     },
@@ -117,9 +124,21 @@ POR_DEFECTO: dict[str, dict[str, Any]] = {
             "auxiliar general", "digitador", "auxiliar de archivo", "auxiliar de correspondencia", "auxiliar de servicios generales",
             "auxiliar de gestion documental", "auxiliar de gestión documental", "auxiliar de soporte administrativ",
             "asistente de archivo", "mensajero", "auxiliar de logistica", "auxiliar de logística", "auxiliar de almacen",
-            "auxiliar de almacén", "auxiliar de inventario",
+            "auxiliar de almacén", "auxiliar de inventario", "asistente de gerencia", "asistente de gestion", "asistente de gestión",
+            "auxiliar de servicio al cliente", "auxiliar de servicios al cliente", "asesor comercial", "asesora comercial",
+            "asesor de ventas", "asesora de ventas", "asesor de venta", "cajero", "cajera", "data entry",
+            "auxiliar contable y administrativ", "asistente contable y administrativ",
+            "auxiliar administrativ y contable", "asistente administrativ y contable",
+            "auxiliar administrativa bilingue", "asistente administrativa bilingue", "auxiliar administrativo bilingue",
+            "auxiliar de correspondencia", "operador de call center", "teleoperador", "agente de call center",
         ],
-        "descripcion": "Cargos administrativos u operativos de bajo nivel que se descartan siempre (el observatorio prioriza analista, coordinación de área, gerencia, etc.).",
+        "descripcion": "Cargos administrativos u operativos de bajo nivel que se descartan siempre (incluso si la descripción menciona Excel). "
+                       "No aplican si el cargo es claramente profesional (analista, contador, economista, coordinador financiero, etc.).",
+    },
+    "requiere_software_o_habilidad": {
+        "valor": True,
+        "descripcion": "Solo guardar ofertas relevantes que mencionen software del catálogo (excepto Office genérico) "
+                       "o una habilidad técnica cursable. Ver observatorio/pipeline/valor_formativo.py.",
     },
     "cursos": {
         "valor": {
@@ -164,4 +183,10 @@ def leer_config(s: Session) -> dict[str, Any]:
             cfg["objetivo_ofertas_corrida"] = int(lim)
         elif meta is not None:
             cfg["objetivo_ofertas_corrida"] = int(meta or 10000)
+    from observatorio.distribucion import DISTRIBUCION_FUENTES_DEFECTO, distribucion_carreras_igualitaria
+
+    if not cfg.get("distribucion_fuentes"):
+        cfg["distribucion_fuentes"] = dict(DISTRIBUCION_FUENTES_DEFECTO)
+    if not cfg.get("distribucion_carreras"):
+        cfg["distribucion_carreras"] = distribucion_carreras_igualitaria(cfg.get("carreras") or [])
     return cfg

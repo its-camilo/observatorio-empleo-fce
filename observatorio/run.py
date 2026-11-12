@@ -14,7 +14,7 @@ Pasos sueltos (los usa GitHub Actions):
     python -m observatorio.run reporte    --run-id ID
     python -m observatorio.run exportar   --semestre 2026-II --corte inicio --salida observatorio.xlsx
     python -m observatorio.run migrar     (crea/actualiza tablas con Alembic) | semilla
-    python -m observatorio.run purga-operativa [--aplicar]  (desactiva términos retirados; borra ofertas operativas)
+    python -m observatorio.run purga-operativa | purga-reglas [--aplicar]  (purga por reglas operativas y valor formativo)
 """
 from __future__ import annotations
 
@@ -26,11 +26,11 @@ import sys
 
 ACCIONES = (
     "completa", "preparar", "extraer", "extraer-secuencial", "cursos", "consolidar", "reporte", "exportar",
-    "migrar", "semilla", "purga-operativa",
+    "migrar", "semilla", "purga-operativa", "purga-reglas",
 )
 
 # Comandos de mantenimiento / export que no requieren id de ejecución de corrida.
-ACCIONES_SIN_RUN_ID = frozenset({"exportar", "purga-operativa"})
+ACCIONES_SIN_RUN_ID = frozenset({"exportar", "purga-operativa", "purga-reglas"})
 
 
 def configurar_logs() -> None:
@@ -70,6 +70,22 @@ def imprimir_reporte(e) -> None:
     print(f"Total del corte: {e.total_corte} (meta {e.meta_ofertas})  ·  mini corrida: {'sí' if e.mini_corrida else 'no'}")
     print("Por fuente:", json.dumps(e.conteo_por_fuente or {}, ensure_ascii=False))
     print("Por carrera:", json.dumps(e.conteo_por_carrera or {}, ensure_ascii=False))
+    logro = (e.parametros or {}).get("logro_extraccion")
+    presu_f = (e.parametros or {}).get("presupuesto_fuentes") or {}
+    presu_c = (e.parametros or {}).get("presupuesto_carreras") or {}
+    if logro or presu_f or presu_c:
+        print("Extracción (crudas) — objetivo vs logrado:")
+        obj = logro.get("objetivo") if logro else (e.parametros or {}).get("objetivo_ofertas_corrida")
+        if obj:
+            print(f"  Objetivo global: {obj}")
+        por_f = (logro or {}).get("por_fuente") or {}
+        for f, meta in sorted(presu_f.items()):
+            nom = {"linkedin": "LinkedIn", "indeed": "Indeed", "computrabajo": "Computrabajo"}.get(f, f)
+            hecho = por_f.get(nom, por_f.get(f, 0))
+            print(f"  · {nom}: meta {meta}, logrado {hecho}")
+        por_c = (logro or {}).get("por_carrera") or {}
+        for c, meta in sorted(presu_c.items()):
+            print(f"  · {c}: meta {meta}, logrado {por_c.get(c, 0)}")
     if e.uso_llm:
         print("Clasificación con IA:", json.dumps(e.uso_llm, ensure_ascii=False))
     m, sg = divmod(e.duracion_segundos or 0, 60)
@@ -88,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--semestre")
     p.add_argument("--corte", choices=["inicio", "mitad", "final", "Inicio", "Mitad", "Final"])
     p.add_argument("--run-id", dest="run_id")
-    p.add_argument("--fuente", help="linkedin | indeed | google | computrabajo")
+    p.add_argument("--fuente", help="linkedin | indeed | computrabajo")
     p.add_argument("--fuentes", help="Lista separada por comas para limitar las fuentes")
     p.add_argument("--fragmento", type=int, default=0)
     p.add_argument("--fragmentos", type=int, default=1)
@@ -103,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--ejecutado-por")
     p.add_argument("--salida", default="observatorio.xlsx")
     p.add_argument("--github-output", help="Archivo donde escribir la matriz (GitHub Actions)")
-    p.add_argument("--aplicar", action="store_true", help="Con purga-operativa: aplica cambios en la base (sin esto solo informa)")
+    p.add_argument("--aplicar", action="store_true", help="Con purga-operativa/purga-reglas: aplica cambios (sin esto solo vista previa)")
     a = p.parse_args(argv)
 
     if a.accion == "migrar":
@@ -188,14 +204,14 @@ def main(argv: list[str] | None = None) -> int:
                 f.write(a_excel(s, sem, cor))
             print(f"Archivo guardado: {a.salida}")
             return 0
-        if a.accion == "purga-operativa":
+        if a.accion in ("purga-operativa", "purga-reglas"):
             from sqlalchemy import func, select
 
             from observatorio.db.modelos import TerminoBusqueda
             from observatorio.mantenimiento import (
                 TERMINOS_BUSQUEDA_RETIRADOS,
                 desactivar_terminos_retirados,
-                purgar_ofertas_operativas,
+                purgar_por_reglas,
             )
 
             n_terms_activos = s.scalar(
@@ -203,12 +219,13 @@ def main(argv: list[str] | None = None) -> int:
                 .select_from(TerminoBusqueda)
                 .where(TerminoBusqueda.termino.in_(TERMINOS_BUSQUEDA_RETIRADOS), TerminoBusqueda.activo.is_(True))
             ) or 0
-            res = purgar_ofertas_operativas(s, aplicar=a.aplicar)
+            res = purgar_por_reglas(s, aplicar=a.aplicar)
             n_desactivados = desactivar_terminos_retirados(s) if a.aplicar else 0
             print(
                 json.dumps(
                     {
                         "modo": "aplicar" if a.aplicar else "vista_previa",
+                        "accion": a.accion,
                         "terminos_retirados_activos": n_terms_activos,
                         "terminos_desactivados": n_desactivados,
                         **res,

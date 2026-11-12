@@ -21,9 +21,11 @@ from observatorio.db.modelos import Curso, Ejecucion, Oferta, OfertaCruda, Parti
 from observatorio.db.semilla import sembrar_todo
 from observatorio.parametros import leer_config
 from observatorio.plan_extraccion import (
+    fuentes_para_corrida,
     max_particiones_fuente,
     objetivo_ofertas_corrida,
     ordenar_fuentes,
+    presupuesto_por_carrera,
     presupuesto_por_fuente,
 )
 from observatorio.scraper.base import Consulta
@@ -31,7 +33,7 @@ from observatorio.scraper.http import FuenteBloqueada, explicar_error
 
 log = logging.getLogger("observatorio.corrida")
 
-NOMBRES_FUENTE = {"linkedin": "LinkedIn", "indeed": "Indeed", "google": "Google Jobs", "computrabajo": "Computrabajo"}
+NOMBRES_FUENTE = {"linkedin": "LinkedIn", "indeed": "Indeed", "computrabajo": "Computrabajo", "google": "Google Jobs"}
 CORTES = {"inicio": "Inicio", "mitad": "Mitad", "final": "Final"}
 
 
@@ -51,6 +53,17 @@ def contar_crudas_fuente(s: Session, id_ejecucion: str, fuente: str) -> int:
             select(func.count())
             .select_from(OfertaCruda)
             .where(OfertaCruda.id_ejecucion == id_ejecucion, OfertaCruda.fuente == nombre)
+        )
+        or 0
+    )
+
+
+def contar_crudas_carrera(s: Session, id_ejecucion: str, carrera: str) -> int:
+    return int(
+        s.scalar(
+            select(func.count())
+            .select_from(OfertaCruda)
+            .where(OfertaCruda.id_ejecucion == id_ejecucion, OfertaCruda.carrera_termino == carrera)
         )
         or 0
     )
@@ -81,9 +94,6 @@ def crear_extractor(fuente: str, cfg_fuente: dict):
     if fuente == "indeed":
         from observatorio.scraper.jobspy_fuentes import Indeed
         return Indeed(retraso=retraso)
-    if fuente == "google":
-        from observatorio.scraper.jobspy_fuentes import GoogleJobs
-        return GoogleJobs(retraso=retraso)
     if fuente == "computrabajo":
         from observatorio.scraper.computrabajo import Computrabajo
         return Computrabajo(retraso=retraso, max_paginas=int(cfg_fuente.get("max_paginas", 3)))
@@ -119,15 +129,14 @@ def preparar(s: Session, semestre: str, corte: str, id_ejecucion: str | None = N
     if os.getenv("GITHUB_RUN_ID"):
         ejec.github_run_url = f"{os.getenv('GITHUB_SERVER_URL', 'https://github.com')}/{os.getenv('GITHUB_REPOSITORY')}/actions/runs/{os.getenv('GITHUB_RUN_ID')}"
 
-    activas = [f for f, c in cfg["fuentes"].items() if c.get("activa")]
-    if fuentes:
-        activas = [f for f in activas if f in fuentes] or [f for f in fuentes if f in NOMBRES_FUENTE]
-    activas = ordenar_fuentes(activas)
-    presupuesto = presupuesto_por_fuente(objetivo, activas) if objetivo > 0 else {}
+    activas = fuentes_para_corrida(cfg, fuentes)
+    presupuesto = presupuesto_por_fuente(objetivo, activas, cfg) if objetivo > 0 else {}
+    presupuesto_carreras = presupuesto_por_carrera(objetivo, cfg) if objetivo > 0 else {}
     ejec.parametros = {
         **(ejec.parametros or {}),
         "objetivo_ofertas_corrida": objetivo,
         "presupuesto_fuentes": presupuesto,
+        "presupuesto_carreras": presupuesto_carreras,
     }
     ejec.fuentes = ", ".join(NOMBRES_FUENTE[f] for f in activas)
 
@@ -176,7 +185,7 @@ def crear_particiones(s: Session, ejec: Ejecucion, fuentes: list[str], terminos,
                 if consultas_por_fuente[f] >= max_consultas:
                     break
                 lugar = u.get(f)
-                if lugar is None or (lugar == "" and f in ("linkedin", "indeed", "google")):
+                if lugar is None or (lugar == "" and f in ("linkedin", "indeed")):
                     continue
                 clave_u = f"{u['nombre']}|{lugar}|{'remoto' if u.get('remoto') else ''}"
                 if (f, t.termino, clave_u) in existentes:
@@ -232,13 +241,20 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
     inicio = time.time()
     objetivo = objetivo_ofertas_corrida(cfg, ejec.parametros)
     cupo_fuente = int((ejec.parametros or {}).get("presupuesto_fuentes", {}).get(fuente) or 0)
+    presupuesto_carreras = (ejec.parametros or {}).get("presupuesto_carreras") or {}
     resumen = {"fuente": nombre, "particiones": len(particiones), "hechas": 0, "ofertas": 0, "errores": 0, "bloqueada": False,
-               "objetivo_corrida": objetivo or None, "cupo_fuente": cupo_fuente or None}
+               "objetivo_corrida": objetivo or None, "cupo_fuente": cupo_fuente or None,
+               "presupuesto_carreras": presupuesto_carreras or None}
     log.info("[%s] Fragmento %d/%d: %d consultas pendientes%s", nombre, fragmento + 1, fragmentos, len(particiones),
              f" (objetivo {objetivo} crudas, cupo fuente {cupo_fuente})" if objetivo else "")
     detenido_por_tope = False
     for p in particiones:
         asegurar_sesion_activa(s)
+        cupo_carrera = int(presupuesto_carreras.get(p.carrera) or 0)
+        if cupo_carrera and _contar_sin_autoflush(s, lambda c=p.carrera: contar_crudas_carrera(s, id_ejecucion, c)) >= cupo_carrera:
+            p.estado = "hecha"
+            resumen["hechas"] += 1
+            continue
         if objetivo and _contar_sin_autoflush(s, lambda: contar_crudas_ejecucion(s, id_ejecucion)) >= objetivo:
             log.info("[%s] Objetivo de corrida alcanzado (%d ofertas crudas)", nombre, objetivo)
             resumen["tope_alcanzado"] = True
@@ -259,7 +275,10 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
         restante_fuente = (
             cupo_fuente - _contar_sin_autoflush(s, lambda: contar_crudas_fuente(s, id_ejecucion, fuente))
         ) if cupo_fuente else max_part
-        max_res = max(1, min(max_part, restante_global, restante_fuente))
+        restante_carrera = (
+            cupo_carrera - _contar_sin_autoflush(s, lambda c=p.carrera: contar_crudas_carrera(s, id_ejecucion, c))
+        ) if cupo_carrera else max_part
+        max_res = max(1, min(max_part, restante_global, restante_fuente, restante_carrera))
         c = Consulta(fuente=fuente, termino=p.termino, ubicacion=lugar, nombre_ubicacion=nombre_u, carrera=p.carrera,
                      remoto=bool(remoto), max_resultados=max_res, ventana_dias=int(cfg.get("ventana_dias", 30)))
         p.intentos += 1
@@ -275,6 +294,10 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
                 if cupo_fuente and _contar_sin_autoflush(s, lambda: contar_crudas_fuente(s, id_ejecucion, fuente)) >= cupo_fuente:
                     detenido_por_tope = True
                     resumen["cupo_fuente_alcanzado"] = True
+                    break
+                if cupo_carrera and _contar_sin_autoflush(s, lambda c=p.carrera: contar_crudas_carrera(s, id_ejecucion, c)) >= cupo_carrera:
+                    detenido_por_tope = True
+                    resumen["cupo_carrera_alcanzado"] = True
                     break
                 if o.id_fuente in conocidos:
                     continue
@@ -370,9 +393,7 @@ def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mi
         ejec.mini_corrida = True
         ejec.fase = "mini_corrida"
         terminos = list(s.scalars(select(TerminoBusqueda).where(TerminoBusqueda.activo.is_(True), TerminoBusqueda.tipo == "ampliado")))
-        fuentes = ordenar_fuentes(
-            [f for f in mini_cfg.get("fuentes", ["linkedin", "indeed", "computrabajo"]) if cfg["fuentes"].get(f, {}).get("activa")]
-        )
+        fuentes = fuentes_para_corrida(cfg, mini_cfg.get("fuentes", ["linkedin", "indeed", "computrabajo"]))
         crear_particiones(s, ejec, fuentes, terminos, cfg["ubicaciones"], cfg, mini=True)
         ejec.terminos_usados = sorted(set(ejec.terminos_usados or []) | {f"{t.carrera}: {t.termino} (ampliado)" for t in terminos})
         s.commit()
@@ -439,8 +460,9 @@ def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:
             errores.append(p.error)
     for nombre, d in por_fuente.items():
         if d["consultas"] and d["encontradas"] == 0 and d["consultas_con_error"] == 0:
-            errores.append(f"{nombre} no devolvió ofertas en ninguna consulta. Puede ser un bloqueo silencioso de la fuente "
-                           f"(frecuente en Google Jobs desde servidores en la nube) o un cambio en la página.")
+            errores.append(
+                f"{nombre} no devolvió ofertas en ninguna consulta. Puede ser un bloqueo silencioso de la fuente o un cambio en la página."
+            )
     pendientes = sum(1 for p in parts if p.estado == "pendiente")
     if pendientes:
         errores.append(f"Quedaron {pendientes} consultas sin hacer (tiempo agotado o fuente bloqueada). "
@@ -450,6 +472,20 @@ def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:
         pass  # parada esperada por objetivo de extracción
     elif ejec.total_corte < (ejec.meta_ofertas or 0) and ejec.modo == "completa" and crudas < objetivo:
         errores.append(f"El corte tiene {ejec.total_corte} ofertas relevantes; no alcanzó la meta de {ejec.meta_ofertas}.")
+    logro_fuentes = {NOMBRES_FUENTE.get(f, f): contar_crudas_fuente(s, ejec.id_ejecucion, f) for f in ordenar_fuentes(
+        [k for k in (ejec.parametros or {}).get("presupuesto_fuentes", {})]
+    )}
+    logro_carreras = {
+        c: contar_crudas_carrera(s, ejec.id_ejecucion, c) for c in (ejec.parametros or {}).get("presupuesto_carreras", {})
+    }
+    ejec.parametros = {
+        **(ejec.parametros or {}),
+        "logro_extraccion": {
+            "objetivo": objetivo_ofertas_corrida(leer_config(s), ejec.parametros),
+            "por_fuente": logro_fuentes,
+            "por_carrera": logro_carreras,
+        },
+    }
     ejec.errores_detalle = errores
     ejec.errores = "\n".join(errores) or None
     ejec.fin = ahora()

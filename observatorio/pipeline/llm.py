@@ -34,9 +34,13 @@ Una oferta es relevante si el cargo lo puede ocupar alguien formado en alguna de
 finanzas, economía, análisis económico o de datos de negocio, riesgo, administración, gestión, procesos, proyectos, comercial, talento humano, etc.).
 No es relevante si es de salud, ingeniería de software, oficios operativos, docencia de otras áreas, etc.
 Responde SOLO con JSON con esta forma exacta:
-{{"resultados": [{{"id": "<id>", "relevante": true, "carreras": ["<carrera principal>", "..."], "herramientas_no_catalogadas": ["..."]}}]}}
+{{"resultados": [{{"id": "<id>", "relevante": true, "carreras": ["<carrera principal>", "..."], "herramientas_no_catalogadas": ["..."],
+"habilidades_tecnicas": ["..."], "tiene_habilidad_cursable": true}}]}}
 "carreras" debe usar exactamente los nombres dados, la principal primero, máximo 5; vacía si no es relevante.
-"herramientas_no_catalogadas": programas o herramientas de software mencionados (máximo 5), puede ir vacía."""
+"herramientas_no_catalogadas": programas o herramientas de software mencionados (máximo 5), puede ir vacía.
+"habilidades_tecnicas": habilidades técnicas o de dominio que justificarían un curso (p. ej. SAP, NIIF, SQL, Excel avanzado, análisis de datos); máximo 5.
+"tiene_habilidad_cursable": true si hay al menos una herramienta del catálogo, una herramienta_no_catalogada seria, o una habilidad_tecnica relevante.
+No cuentan habilidades blandas (trabajo en equipo, comunicación) ni «manejo básico de Office/Excel» sin nivel avanzado."""
 
 
 def _detalle_error_http(r: requests.Response) -> str:
@@ -250,6 +254,8 @@ class ClienteLLM:
                     "relevante": bool(x.get("relevante")),
                     "carreras": [c for c in (x.get("carreras") or []) if c in self.carreras][:5],
                     "herramientas_no_catalogadas": [str(t)[:60] for t in (x.get("herramientas_no_catalogadas") or [])][:5],
+                    "habilidades_tecnicas": [str(t)[:80] for t in (x.get("habilidades_tecnicas") or [])][:5],
+                    "tiene_habilidad_cursable": bool(x.get("tiene_habilidad_cursable")),
                 }
                 if res["relevante"] and not res["carreras"]:
                     continue

@@ -58,3 +58,8 @@ def test_auxiliar_administrativo_no_relevante():
 def test_analista_administrativo_sigue_relevante():
     c = clasificador().clasificar("Analista Administrativo", "Profesional en administración de empresas")
     assert c.estado == "relevante"
+
+
+def test_asistente_gerencia_no_relevante():
+    c = clasificador().clasificar("Asistente de gerencia", "Apoyo con Excel", "Administración de Empresas")
+    assert c.estado == "no_relevante"
