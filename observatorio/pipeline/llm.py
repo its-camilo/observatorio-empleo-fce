@@ -94,7 +94,7 @@ class ClienteLLM:
         log.warning("OpenRouter desactivado en esta corrida: %s", self.motivo_inactivo)
 
     # ------------------------------------------------------------------ cupo
-    def _uso_hoy(self) -> int:
+    def _uso_hoy_bd(self) -> int:
         from observatorio.db.modelos import Config
 
         fila = self.s.get(Config, "llm_uso")
@@ -102,12 +102,27 @@ class ClienteLLM:
             return int(fila.valor.get("solicitudes", 0))
         return 0
 
+    def _uso_hoy(self) -> int:
+        # Leído una vez de la BD y luego en memoria: no se toca la BD mientras se espera a OpenRouter
+        if getattr(self, "_uso_base", None) is None or getattr(self, "_uso_fecha", None) != date.today().isoformat():
+            self._uso_base = self._uso_hoy_bd()
+            self._uso_fecha = date.today().isoformat()
+            self._uso_sin_guardar = 0
+        return self._uso_base + self._uso_sin_guardar
+
     def _sumar_uso(self) -> None:
+        self._uso_hoy()
+        self._uso_sin_guardar += 1
+
+    def _guardar_uso(self) -> None:
         from observatorio.db.modelos import Config
 
+        if not getattr(self, "_uso_sin_guardar", 0):
+            return
         fila = self.s.get(Config, "llm_uso")
         hoy = date.today().isoformat()
-        n = self._uso_hoy() + 1
+        n = self._uso_hoy_bd() + self._uso_sin_guardar
+        self._uso_base, self._uso_sin_guardar = n, 0
         if fila is None:
             self.s.add(Config(clave="llm_uso", valor={"fecha": hoy, "solicitudes": n},
                               descripcion="Contador interno de solicitudes diarias a OpenRouter"))
@@ -130,10 +145,17 @@ class ClienteLLM:
         return fila.resultado if fila else None
 
     def _guardar_cache(self, h: str, resultado: dict, modelo: str) -> None:
+        if not hasattr(self, "_cache_nuevo"):
+            self._cache_nuevo = {}
+        self._cache_nuevo[h] = (resultado, modelo)
+
+    def _volcar_cache(self) -> None:
         from observatorio.db.modelos import LlmCache
 
-        if self.s.get(LlmCache, h) is None:
-            self.s.add(LlmCache(hash=h, resultado=resultado, modelo=modelo))
+        for h, (resultado, modelo) in (getattr(self, "_cache_nuevo", None) or {}).items():
+            if self.s.get(LlmCache, h) is None:
+                self.s.add(LlmCache(hash=h, resultado=resultado, modelo=modelo))
+        self._cache_nuevo = {}
 
     # ------------------------------------------------------------------ API
     def _llamar(self, mensajes: list[dict]) -> tuple[dict | None, str]:
@@ -261,7 +283,10 @@ class ClienteLLM:
                     continue
                 salida[o["id"]] = res
                 self._guardar_cache(h, res, modelo)
-            self.s.flush()
+        # La BD se toca sólo al final, cuando ya no hay esperas largas por la red
+        self._volcar_cache()
+        self._guardar_uso()
+        self.s.flush()
         return salida
 
     def resumen(self) -> dict:

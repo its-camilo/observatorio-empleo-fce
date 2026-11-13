@@ -34,8 +34,16 @@ def motor(url: str | None = None) -> Engine:
             kwargs["poolclass"] = NullPool
             kwargs["connect_args"] = {"connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "8") or 8)}
         else:
-            kwargs.update(pool_size=3, max_overflow=2, pool_recycle=300)
-            kwargs["connect_args"] = {"connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "10") or 10)}
+            kwargs.update(pool_size=3, max_overflow=2, pool_recycle=240)
+            # Keepalives TCP: los runners de GitHub (Azure) cortan conexiones inactivas ~4 min y Neon cierra el SSL.
+            # Pasa mientras se espera a OpenRouter o a una fuente con la transacción abierta.
+            kwargs["connect_args"] = {
+                "connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "10") or 10),
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 5,
+            }
         eng = create_engine(url, **kwargs)
         if url.startswith("sqlite"):
             @event.listens_for(eng, "connect")
