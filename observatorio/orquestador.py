@@ -514,6 +514,13 @@ def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mi
 def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:
     parts = list(s.scalars(select(Particion).where(Particion.id_ejecucion == ejec.id_ejecucion)))
     crudas = s.scalar(select(func.count()).select_from(OfertaCruda).where(OfertaCruda.id_ejecucion == ejec.id_ejecucion)) or 0
+    objetivo_extraccion = objetivo_ofertas_corrida(leer_config(s), ejec.parametros)
+    if objetivo_extraccion > 0 and crudas >= objetivo_extraccion:
+        # Se llegó al objetivo: las consultas que no hicieron falta no son trabajo pendiente ni un error
+        for p in parts:
+            if p.estado == "pendiente":
+                p.estado = "omitida"
+                p.error = None
     omitidas = sum(p.omitidas or 0 for p in parts)
     ejec.ofertas_encontradas = crudas + omitidas
     t = proc.total if proc else None
