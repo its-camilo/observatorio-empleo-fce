@@ -63,3 +63,31 @@ def test_relleno_llega_al_objetivo_con_consultas_pobres(sesion, monkeypatch):
     assert total >= 300, total
     por_carrera = {c: orq.contar_crudas_carrera(sesion, "r1", c) for c in e.parametros["presupuesto_carreras"]}
     assert min(por_carrera.values()) > 0
+
+
+def test_objetivo_alcanzado_no_deja_corrida_incompleta(sesion, monkeypatch):
+    """Corrida 2026-II-mitad-48d007: llegó a 200/200 y quedó "incompleta" por 36 consultas de relleno sin hacer."""
+    import itertools
+
+    from observatorio.db.modelos import Ejecucion
+    from observatorio.scraper.base import OfertaCrudaDatos
+
+    contador = itertools.count()
+
+    class Rica:
+        def extraer(self, c, ya_existe):
+            for _ in range(40):
+                i = next(contador)
+                yield OfertaCrudaDatos(fuente={"linkedin": "LinkedIn", "indeed": "Indeed"}.get(c.fuente, "Computrabajo"),
+                                       id_fuente=f"y{i}", url=f"https://e/y{i}", cargo=c.termino, descripcion="d")
+
+    monkeypatch.setattr(orq, "crear_extractor", lambda f, cfg: Rica())
+    e = Ejecucion(id_ejecucion="r2", semestre="2026-II", corte="Mitad", parametros={"objetivo_ofertas_corrida": 100})
+    sesion.add(e)
+    sesion.flush()
+    orq.preparar(sesion, "2026-II", "mitad", id_ejecucion="r2")
+    orq.extraer_secuencial(sesion, "r2")
+    assert orq.contar_crudas_ejecucion(sesion, "r2") >= 100
+    orq.finalizar(sesion, e)
+    assert e.estado == "completada", (e.estado, e.errores)
+    assert not any("sin hacer" in x for x in (e.errores_detalle or []))
