@@ -157,8 +157,15 @@ def preparar(s: Session, semestre: str, corte: str, id_ejecucion: str | None = N
     return ejec
 
 
+FACTOR_CONSULTAS = 4  # consultas planeadas por cada consulta "llena" que cabría en el cupo
+MIN_CONSULTAS_CARRERA = 4  # mínimo de consultas por fuente y carrera
+RONDAS_RELLENO = 3  # rondas extra si la corrida no llega al objetivo
+CONSULTAS_RELLENO = 6  # consultas nuevas por fuente y carrera en cada ronda
+
+
 def crear_particiones(s: Session, ejec: Ejecucion, fuentes: list[str], terminos, ubicaciones: list[dict], cfg: dict,
-                      mini: bool, max_por_particion: int | None = None) -> int:
+                      mini: bool, max_por_particion: int | None = None, extra_por_carrera: int | None = None,
+                      carreras: set[str] | None = None) -> int:
     """Crea las consultas (término × ciudad) por fuente.
 
     Las consultas se reparten entre carreras según el cupo fuente×carrera y se intercalan
@@ -178,9 +185,12 @@ def crear_particiones(s: Session, ejec: Ejecucion, fuentes: list[str], terminos,
     for f in fuentes_orden:
         max_part_f = int(max_por_particion or cfg["fuentes"].get(f, {}).get("max_por_particion", 100))
         cupo = presupuesto.get(f)
-        con_tope = not mini and cupo is not None and int(cupo) > 0
+        con_tope = not mini and not extra_por_carrera and cupo is not None and int(cupo) > 0
+        factor = max(1, int(cfg.get("factor_consultas", FACTOR_CONSULTAS)))
         colas: dict[str, list] = {}
         for carrera, ts in por_carrera.items():
+            if carreras is not None and carrera not in carreras:
+                continue
             ts_f = [t for t in ts if not [x for x in (t.fuentes or "").split(",") if x.strip()]
                     or f in [x.strip() for x in (t.fuentes or "").split(",")]]
             pares = []
@@ -196,7 +206,11 @@ def crear_particiones(s: Session, ejec: Ejecucion, fuentes: list[str], terminos,
                 cupo_c = int((cupo_fc.get(f) or {}).get(carrera) or 0)
                 if cupo_c <= 0:
                     continue
-                pares = pares[: max_particiones_fuente(cupo_c, max_part_f)]
+                # Una consulta casi nunca trae max_por_particion ofertas nuevas (repetidas, ventana de 30 días,
+                # pocas vacantes en ciudades pequeñas): se planean varias de más; el cupo corta la extracción.
+                pares = pares[: max(MIN_CONSULTAS_CARRERA, max_particiones_fuente(cupo_c, max_part_f) * factor)]
+            elif extra_por_carrera:
+                pares = pares[:extra_por_carrera]
             colas[carrera] = pares
         i = 0
         while any(i < len(v) for v in colas.values()):
@@ -233,7 +247,7 @@ def matriz(s: Session, id_ejecucion: str) -> list[dict]:
 # 2. Extraer
 # ---------------------------------------------------------------------------
 def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, fragmentos: int = 1,
-            max_minutos: float | None = None, solo_mini: bool = False) -> dict:
+            max_minutos: float | None = None, solo_mini: bool = False, relleno: bool = False) -> dict:
     cfg = leer_config(s)
     ejec = s.get(Ejecucion, id_ejecucion)
     if ejec is None:
@@ -263,7 +277,14 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
     cupos_fc = cupos_fc or {}
 
     def crudas_carrera(c: str) -> int:
+        if relleno:
+            return _contar_sin_autoflush(s, lambda: contar_crudas_carrera(s, id_ejecucion, c))
         return _contar_sin_autoflush(s, lambda: contar_crudas_fuente_carrera(s, id_ejecucion, fuente, c))
+
+    if relleno:
+        # Relleno: lo que otra fuente no alcanzó lo puede cubrir esta; sólo se respeta el cupo total por carrera
+        cupo_fuente = 0
+        cupos_fc = {c: int(v) for c, v in presupuesto_carreras.items()}
 
     resumen = {"fuente": nombre, "particiones": len(particiones), "hechas": 0, "ofertas": 0, "errores": 0, "bloqueada": False,
                "objetivo_corrida": objetivo or None, "cupo_fuente": cupo_fuente or None,
@@ -407,6 +428,29 @@ def cerrar_corrida_workflow(
     return ejec
 
 
+def _procesar_con_reintento(s: Session, proc, intentos: int = 3) -> None:
+    """Procesa las crudas; si se cae la conexión con la BD (Neon cierra el SSL), reconecta y sigue.
+
+    Cada bloque se confirma al terminar, así que un reintento retoma desde el bloque que se perdió.
+    """
+    from sqlalchemy.exc import OperationalError
+
+    for i in range(intentos):
+        try:
+            proc.procesar_pendientes()
+            return
+        except OperationalError as e:
+            try:
+                s.rollback()  # descarta la conexión rota; la siguiente consulta abre otra (pool_pre_ping)
+            except Exception:  # noqa: BLE001
+                pass
+            if i == intentos - 1:
+                raise
+            log.warning("Se perdió la conexión con la base al procesar (intento %d/%d); se reintenta: %s",
+                        i + 1, intentos, str(e).splitlines()[0][:200])
+            time.sleep(5 * (i + 1))
+
+
 def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mini: bool = True) -> Ejecucion:
     from observatorio.pipeline.procesar import Procesador
 
@@ -418,11 +462,7 @@ def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mi
     commit_extraccion(s)
     proc = Procesador(s, ejec, cfg, usar_llm=usar_llm)
     try:
-        try:
-            proc.procesar_pendientes()
-        except Exception:
-            asegurar_sesion_activa(s)
-            raise
+        _procesar_con_reintento(s, proc)
 
         # Mini corrida automática si no se llegó a la meta
         mini_cfg = cfg.get("mini_corrida") or {}
@@ -454,7 +494,7 @@ def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mi
                     asegurar_sesion_activa(s)
             ejec.fase = "procesando"
             s.commit()
-            proc.procesar_pendientes()
+            _procesar_con_reintento(s, proc)
 
         proc.guardar_no_catalogados()
         finalizar(s, ejec, proc)
@@ -618,8 +658,40 @@ def extraer_secuencial(s: Session, id_ejecucion: str, max_minutos: float | None 
             if r.get("tope_alcanzado") or r.get("cupo_fuente_alcanzado") or r.get("bloqueada"):
                 detenido = True
                 break
-        if detenido or (objetivo and contar_crudas_ejecucion(s, id_ejecucion) >= objetivo):
+        if detenido and (r.get("tope_alcanzado") or r.get("bloqueada")):
+            if r.get("tope_alcanzado"):
+                break
+            continue
+        if objetivo and contar_crudas_ejecucion(s, id_ejecucion) >= objetivo:
             break
+
+    # Relleno: si no se llegó al objetivo, más consultas (términos/ciudades siguientes) para las carreras que faltan
+    if objetivo:
+        presupuesto_carreras = (ejec.parametros or {}).get("presupuesto_carreras") or {}
+        terminos = list(s.scalars(select(TerminoBusqueda).where(TerminoBusqueda.activo.is_(True), TerminoBusqueda.tipo == "principal")
+                                  .order_by(TerminoBusqueda.carrera, TerminoBusqueda.id)))
+        for ronda in range(1, RONDAS_RELLENO + 1):
+            if contar_crudas_ejecucion(s, id_ejecucion) >= objetivo:
+                break
+            if max_minutos is not None and max_minutos - (time.time() - t0) / 60 <= 1:
+                break
+            faltan = {c for c, cupo in presupuesto_carreras.items() if contar_crudas_carrera(s, id_ejecucion, c) < int(cupo)}
+            if not faltan:
+                break
+            nuevas = crear_particiones(s, ejec, fuentes, terminos, cfg["ubicaciones"], cfg, mini=False,
+                                       extra_por_carrera=CONSULTAS_RELLENO, carreras=faltan)
+            commit_extraccion(s)
+            log.info("Relleno %d: faltan %d crudas para el objetivo; %d consultas nuevas (%s)", ronda,
+                     objetivo - contar_crudas_ejecucion(s, id_ejecucion), nuevas, ", ".join(sorted(faltan)))
+            for f in fuentes:
+                if contar_crudas_ejecucion(s, id_ejecucion) >= objetivo:
+                    break
+                restante = None if max_minutos is None else max_minutos - (time.time() - t0) / 60
+                if restante is not None and restante <= 1:
+                    break
+                r = extraer(s, id_ejecucion, f, 0, 1, max_minutos=restante, relleno=True)
+                r["relleno"] = ronda
+                resumenes.append(r)
     return resumenes
 
 
