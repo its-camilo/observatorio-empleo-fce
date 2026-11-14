@@ -128,8 +128,9 @@ jobs:
 
   consolidar:
     name: Consolidar y reporte
+    # `extraer` es matriz: este job queda en success solo si terminan todos los hijos; consolidar corre aunque alguno falle (partial crudas).
     needs: [preparar, extraer, cursos]
-    if: ${{ always() && needs.preparar.result == 'success' }}
+    if: ${{ always() && needs.preparar.result == 'success' && (needs.extraer.result == 'success' || needs.extraer.result == 'failure' || needs.extraer.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 350
     steps:
@@ -174,7 +175,7 @@ jobs:
           cache-dependency-path: requirements-scraper.txt
       - run: pip install -r requirements-scraper.txt
       - name: Registrar cierre en base de datos
-        if: ${{ needs.extraer.result != 'success' || needs.consolidar.result != 'success' }}
+        if: ${{ needs.extraer.result == 'failure' || needs.extraer.result == 'cancelled' || needs.consolidar.result == 'failure' }}
         env:
           CORRIDA_CIERRE_MOTIVO: >-
             Workflow interrumpido o con fallos (extraer=${{ needs.extraer.result }},

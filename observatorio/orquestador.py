@@ -121,39 +121,53 @@ def preparar(s: Session, semestre: str, corte: str, id_ejecucion: str | None = N
     ejec.estado = "en_curso"
     ejec.fase = "preparada"
     ejec.inicio = ejec.inicio or ahora()
-    objetivo = objetivo_ofertas_corrida(cfg, ejec.parametros)
-    ejec.meta_ofertas = objetivo
     if os.getenv("GITHUB_RUN_ID"):
         ejec.github_run_url = f"{os.getenv('GITHUB_SERVER_URL', 'https://github.com')}/{os.getenv('GITHUB_REPOSITORY')}/actions/runs/{os.getenv('GITHUB_RUN_ID')}"
 
-    activas = fuentes_para_corrida(cfg, fuentes)
-    presupuesto = presupuesto_por_fuente(objetivo, activas, cfg) if objetivo > 0 else {}
-    presupuesto_carreras = presupuesto_por_carrera(objetivo, cfg) if objetivo > 0 else {}
-    ejec.parametros = {
-        **(ejec.parametros or {}),
-        "objetivo_ofertas_corrida": objetivo,
-        "presupuesto_fuentes": presupuesto,
-        "presupuesto_carreras": presupuesto_carreras,
-        "presupuesto_fuente_carrera": presupuesto_fuente_carrera(presupuesto, cfg),
-    }
-    ejec.fuentes = ", ".join(NOMBRES_FUENTE[f] for f in activas)
+    params = ejec.parametros or {}
+    n_particiones = s.scalar(select(func.count()).select_from(Particion).where(Particion.id_ejecucion == id_ejecucion)) or 0
+    presupuesto_congelado = bool(
+        params.get("presupuesto_fuentes")
+        and params.get("presupuesto_carreras")
+        and params.get("presupuesto_fuente_carrera")
+        and n_particiones > 0
+    )
 
-    terminos = list(s.scalars(select(TerminoBusqueda).where(TerminoBusqueda.activo.is_(True), TerminoBusqueda.tipo == "principal")
-                              .order_by(TerminoBusqueda.carrera, TerminoBusqueda.id)))
-    if limite_terminos:
-        # repartir el límite entre carreras para que haya de las tres
-        por_carrera: dict[str, list] = {}
-        for t in terminos:
-            por_carrera.setdefault(t.carrera, []).append(t)
-        terminos, i = [], 0
-        while len(terminos) < limite_terminos and any(i < len(v) for v in por_carrera.values()):
-            for v in por_carrera.values():
-                if i < len(v) and len(terminos) < limite_terminos:
-                    terminos.append(v[i])
-            i += 1
-    ejec.terminos_usados = sorted({f"{t.carrera}: {t.termino}" for t in terminos})
-    ubicaciones = cfg["ubicaciones"][:limite_ubicaciones] if limite_ubicaciones else cfg["ubicaciones"]
-    crear_particiones(s, ejec, activas, terminos, ubicaciones, cfg, mini=False, max_por_particion=max_por_particion)
+    if presupuesto_congelado:
+        objetivo = int(params.get("objetivo_ofertas_corrida") or 0)
+        activas = ordenar_fuentes(list(params["presupuesto_fuentes"].keys()))
+        ejec.meta_ofertas = objetivo or ejec.meta_ofertas
+        log.info("Reanudación %s: se conservan presupuestos congelados (%d particiones existentes)",
+                 id_ejecucion, n_particiones)
+    else:
+        objetivo = objetivo_ofertas_corrida(cfg, params)
+        ejec.meta_ofertas = objetivo
+        activas = fuentes_para_corrida(cfg, fuentes)
+        presupuesto = presupuesto_por_fuente(objetivo, activas, cfg) if objetivo > 0 else {}
+        presupuesto_carreras = presupuesto_por_carrera(objetivo, cfg) if objetivo > 0 else {}
+        ejec.parametros = {
+            **params,
+            "objetivo_ofertas_corrida": objetivo,
+            "presupuesto_fuentes": presupuesto,
+            "presupuesto_carreras": presupuesto_carreras,
+            "presupuesto_fuente_carrera": presupuesto_fuente_carrera(presupuesto, cfg),
+        }
+        ejec.fuentes = ", ".join(NOMBRES_FUENTE[f] for f in activas)
+        terminos = list(s.scalars(select(TerminoBusqueda).where(TerminoBusqueda.activo.is_(True), TerminoBusqueda.tipo == "principal")
+                                  .order_by(TerminoBusqueda.carrera, TerminoBusqueda.id)))
+        if limite_terminos:
+            por_carrera: dict[str, list] = {}
+            for t in terminos:
+                por_carrera.setdefault(t.carrera, []).append(t)
+            terminos, i = [], 0
+            while len(terminos) < limite_terminos and any(i < len(v) for v in por_carrera.values()):
+                for v in por_carrera.values():
+                    if i < len(v) and len(terminos) < limite_terminos:
+                        terminos.append(v[i])
+                i += 1
+        ejec.terminos_usados = sorted({f"{t.carrera}: {t.termino}" for t in terminos})
+        ubicaciones = cfg["ubicaciones"][:limite_ubicaciones] if limite_ubicaciones else cfg["ubicaciones"]
+        crear_particiones(s, ejec, activas, terminos, ubicaciones, cfg, mini=False, max_por_particion=max_por_particion)
     s.flush()
     return ejec
 
@@ -248,21 +262,24 @@ def matriz_extraccion_fuentes(
     max_minutos_total: float = 320,
     fuentes_filtradas: list[str] | None = None,
 ) -> list[dict]:
-    """Un job de GitHub Actions por fuente, con tiempo máximo proporcional al cupo configurado."""
-    cfg = leer_config(s)
+    """Un job de GitHub Actions por fuente (paralelos): cada uno recibe el tiempo completo del job.
+
+    El reparto proporcional de minutos aplica solo a ``extraer_secuencial`` (extracción local en serie).
+    """
     ejec = s.get(Ejecucion, id_ejecucion)
-    fuentes = ordenar_fuentes(
-        [f for (f,) in s.execute(select(Particion.fuente).where(Particion.id_ejecucion == id_ejecucion).distinct())]
-    )
+    if ejec and (ejec.parametros or {}).get("presupuesto_fuentes"):
+        fuentes = ordenar_fuentes(list((ejec.parametros or {})["presupuesto_fuentes"].keys()))
+    else:
+        fuentes = ordenar_fuentes(
+            [f for (f,) in s.execute(select(Particion.fuente).where(Particion.id_ejecucion == id_ejecucion).distinct())]
+        )
     if fuentes_filtradas:
         permitidas = {x.strip().lower() for x in fuentes_filtradas if x.strip()}
         fuentes = [f for f in fuentes if f in permitidas]
     if not fuentes:
         return []
-    objetivo = objetivo_ofertas_corrida(cfg, ejec.parametros if ejec else None)
-    presupuesto = (ejec.parametros or {}).get("presupuesto_fuentes") if ejec else {}
-    minutos = minutos_por_fuente(max_minutos_total, objetivo, presupuesto or {}, fuentes)
-    return [{"fuente": f, "max_minutos": round(minutos.get(f) or max_minutos_total, 1)} for f in fuentes]
+    t = round(float(max_minutos_total), 1)
+    return [{"fuente": f, "max_minutos": t} for f in fuentes]
 
 
 def extraer_fuente(
