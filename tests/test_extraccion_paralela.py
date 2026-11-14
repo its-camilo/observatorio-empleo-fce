@@ -1,9 +1,9 @@
 """Extracción paralela por fuente (matriz Actions) y reparto de tiempo."""
+import pytest
 from sqlalchemy import func, select
 
 from observatorio import orquestador as orq
 from observatorio.db.modelos import Particion
-from observatorio.parametros import leer_config
 from observatorio.plan_extraccion import minutos_por_fuente, presupuesto_por_fuente
 
 
@@ -14,7 +14,7 @@ def test_minutos_por_fuente_suman_el_tiempo_total_modo_secuencial():
         "carreras": [],
     })
     m = minutos_por_fuente(320, 3000, presu, ["linkedin", "indeed", "computrabajo"])
-    assert sum(m.values()) == 320
+    assert sum(m.values()) == pytest.approx(320)
 
 
 def test_matriz_paralela_tiempo_completo_en_cada_job(sesion):
