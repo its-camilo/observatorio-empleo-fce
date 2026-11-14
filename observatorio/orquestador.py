@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+import traceback
 import uuid
 from collections import Counter
 from datetime import date
@@ -100,15 +101,55 @@ def crear_extractor(fuente: str, cfg_fuente: dict):
 # ---------------------------------------------------------------------------
 # 1. Preparar
 # ---------------------------------------------------------------------------
-def preparar(s: Session, semestre: str, corte: str, id_ejecucion: str | None = None, ejecutado_por: str | None = None,
-             modo: str = "completa", fuentes: list[str] | None = None, limite_terminos: int | None = None,
-             limite_ubicaciones: int | None = None, max_por_particion: int | None = None,
-             ejecutor: str | None = None) -> Ejecucion:
+def preparar(
+    s: Session,
+    semestre: str,
+    corte: str,
+    id_ejecucion: str | None = None,
+    ejecutado_por: str | None = None,
+    modo: str = "completa",
+    fuentes: list[str] | None = None,
+    limite_terminos: int | None = None,
+    limite_ubicaciones: int | None = None,
+    max_por_particion: int | None = None,
+    ejecutor: str | None = None,
+    solo_consolidar: bool = False,
+) -> Ejecucion:
     sembrar_todo(s)
     cfg = leer_config(s)
     semestre, corte = normalizar_semestre(semestre), normalizar_corte(corte)
     id_ejecucion = id_ejecucion or f"{semestre}-{corte.lower()}-{uuid.uuid4().hex[:6]}"
     ejec = s.get(Ejecucion, id_ejecucion)
+    if solo_consolidar:
+        if ejec is None:
+            raise ValueError("solo_consolidar requiere un run-id de corrida existente")
+        if (ejec.semestre, ejec.corte) != (semestre, corte):
+            raise ValueError("Ese id de ejecución ya existe con otro semestre/corte")
+        params = ejec.parametros or {}
+        n_particiones = s.scalar(select(func.count()).select_from(Particion).where(Particion.id_ejecucion == id_ejecucion)) or 0
+        if not (
+            params.get("presupuesto_fuentes")
+            and params.get("presupuesto_carreras")
+            and params.get("presupuesto_fuente_carrera")
+            and n_particiones > 0
+        ):
+            raise ValueError(
+                "solo_consolidar exige presupuestos congelados y particiones de una corrida ya preparada"
+            )
+        ejec.ejecutado_por = ejecutado_por or ejec.ejecutado_por or os.getenv("GITHUB_ACTOR") or "local"
+        ejec.estado = "en_curso"
+        ejec.fase = "procesando"
+        ejec.fin = None
+        if ejecutor:
+            ejec.ejecutor = ejecutor
+        if os.getenv("GITHUB_RUN_ID"):
+            ejec.github_run_url = (
+                f"{os.getenv('GITHUB_SERVER_URL', 'https://github.com')}/"
+                f"{os.getenv('GITHUB_REPOSITORY')}/actions/runs/{os.getenv('GITHUB_RUN_ID')}"
+            )
+        log.info("Solo consolidación %s: se reutilizan crudas en BD (presupuestos congelados)", id_ejecucion)
+        s.flush()
+        return ejec
     if ejec is None:
         ejec = Ejecucion(id_ejecucion=id_ejecucion, semestre=semestre, corte=corte)
         s.add(ejec)
@@ -567,11 +608,23 @@ def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mi
         s.commit()
         return ejec
     except Exception as e:
+        tb = traceback.format_exc()
+        log.error("Consolidación falló para %s:\n%s", id_ejecucion, tb)
         asegurar_sesion_activa(s)
+        ejec = s.get(Ejecucion, id_ejecucion)
+        mensaje = f"Consolidación interrumpida: {explicar_error('consolidar', e)}"
+        if ejec is not None:
+            detalle = list(ejec.errores_detalle or [])
+            bloque = f"{mensaje}\n--- traceback ---\n{tb}"
+            if bloque not in detalle:
+                detalle.append(bloque)
+            ejec.errores_detalle = detalle
+            ejec.errores = "\n".join(detalle)
+            s.flush()
         cerrar_corrida_workflow(
             s,
             id_ejecucion,
-            f"Consolidación interrumpida: {explicar_error('consolidar', e)}",
+            mensaje,
             conclusion_github="failure",
         )
         raise
@@ -680,7 +733,9 @@ def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:
     ejec.fin = ahora()
     ejec.duracion_segundos = int((ejec.fin - (ejec.inicio or ejec.fin)).total_seconds())
     con_error = sum(1 for p in parts if p.estado == "error")
-    if parts and con_error == len(parts):
+    if ejec.ofertas_guardadas and (pendientes or con_error):
+        ejec.estado = "incompleta"
+    elif parts and con_error == len(parts) and not ejec.ofertas_guardadas:
         ejec.estado = "fallida"
     elif pendientes or con_error:
         ejec.estado = "incompleta"

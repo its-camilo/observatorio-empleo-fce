@@ -30,6 +30,9 @@ log = logging.getLogger("observatorio.llm")
 
 URL = "https://openrouter.ai/api/v1/chat/completions"
 MAX_REINTENTOS = 4
+TIMEOUT_SOLICITUD_DEF = 60.0
+MAX_FALLOS_CONSECUTIVOS_DEF = 8
+MAX_FALLOS_LOTE_DEF = 200
 
 PROMPT_SISTEMA = """Eres un clasificador de ofertas laborales de Colombia para el Observatorio de la Facultad de Ciencias Económicas.
 Para cada oferta decide si es relevante para profesionales o estudiantes de estas carreras: {carreras}.
@@ -80,10 +83,15 @@ class ClienteLLM:
         self.max_dia = int(cfg_llm.get("max_solicitudes_dia", 50))
         self.max_corrida = int(cfg_llm.get("max_solicitudes_corrida", 600))
         self.intervalo = 60.0 / max(1, int(cfg_llm.get("solicitudes_por_minuto", 12)))
+        self.timeout_s = float(cfg_llm.get("timeout_segundos", TIMEOUT_SOLICITUD_DEF))
+        self.max_fallos_consecutivos = int(cfg_llm.get("max_fallos_consecutivos_lote", MAX_FALLOS_CONSECUTIVOS_DEF))
+        self.max_fallos_lote = int(cfg_llm.get("max_fallos_json_corrida", MAX_FALLOS_LOTE_DEF))
         self.habilitado = bool(cfg_llm.get("habilitado", True)) and bool(self.api_key)
         self.carreras = carreras
         self.solicitudes = 0
         self.errores = 0
+        self.fallos_lote = 0
+        self._fallos_consecutivos = 0
         self.desde_cache = 0
         self._ultima = 0.0
         self.motivo_inactivo = "" if self.habilitado else (
@@ -93,8 +101,29 @@ class ClienteLLM:
     def _abrir_circuito(self, codigo: int, detalle: str) -> None:
         self.habilitado = False
         detalle_limpio = " ".join((detalle or "sin detalle").split())
-        self.motivo_inactivo = f"error de API key / cuota OpenRouter (HTTP {codigo}): {detalle_limpio}"
+        if codigo:
+            self.motivo_inactivo = f"error de API key / cuota OpenRouter (HTTP {codigo}): {detalle_limpio}"
+        else:
+            self.motivo_inactivo = detalle_limpio
         log.warning("OpenRouter desactivado en esta corrida: %s", self.motivo_inactivo)
+
+    def _registrar_fallo_lote(self, detalle: str) -> None:
+        self.errores += 1
+        self.fallos_lote += 1
+        self._fallos_consecutivos += 1
+        log.info("OpenRouter: lote no usable (%s); fallos consecutivos %d", detalle[:160], self._fallos_consecutivos)
+        if self._fallos_consecutivos >= self.max_fallos_consecutivos:
+            self._abrir_circuito(
+                0,
+                f"demasiados fallos seguidos de OpenRouter ({self._fallos_consecutivos}); "
+                "el resto de ofertas dudosas se clasifica por reglas",
+            )
+        elif self.fallos_lote >= self.max_fallos_lote:
+            self._abrir_circuito(
+                0,
+                f"tope de fallos de OpenRouter en esta corrida ({self.fallos_lote}); "
+                "el resto de ofertas dudosas se clasifica por reglas",
+            )
 
     # ------------------------------------------------------------------ cupo
     def _uso_hoy_bd(self) -> int:
@@ -173,7 +202,7 @@ class ClienteLLM:
             try:
                 r = requests.post(
                     URL,
-                    timeout=90,
+                    timeout=(10.0, self.timeout_s),
                     headers={
                         "Authorization": f"Bearer {self.api_key}",
                         "HTTP-Referer": "https://github.com/its-camilo/observatorio-empleo-fce",
@@ -196,15 +225,24 @@ class ClienteLLM:
 
             if r.status_code == 200:
                 try:
-                    contenido = r.json()["choices"][0]["message"]["content"]
+                    cuerpo = r.json()
+                    choices = cuerpo.get("choices") or []
+                    if not choices:
+                        self._registrar_fallo_lote("respuesta sin choices")
+                        return None, ""
+                    contenido = (choices[0].get("message") or {}).get("content")
+                    datos = _parsear_json(contenido or "")
+                    if datos is None:
+                        self._registrar_fallo_lote("JSON inválido o vacío")
+                        return None, ""
+                    self._fallos_consecutivos = 0
                     self.solicitudes += 1
                     self._sumar_uso()
-                    return _parsear_json(contenido or ""), self.modelo
+                    return datos, self.modelo
                 except OperationalError:
                     raise
                 except Exception as e:  # respuesta mal formada
-                    log.info("Respuesta no válida de OpenRouter: %s", e)
-                    self.errores += 1
+                    self._registrar_fallo_lote(str(e))
                     return None, ""
 
             if r.status_code == 429:
@@ -297,6 +335,7 @@ class ClienteLLM:
                 if not self.habilitado:
                     break
                 continue
+            self._fallos_consecutivos = 0
             por_id = {str(x.get("id")): x for x in datos.get("resultados", []) if isinstance(x, dict)}
             for h, o in lote:
                 x = por_id.get(str(o["id"]))
@@ -334,11 +373,12 @@ class ClienteLLM:
             "solicitudes": self.solicitudes,
             "desde_cache": self.desde_cache,
             "errores": self.errores,
+            "fallos_lote": self.fallos_lote,
             "uso_hoy": self._uso_hoy() if self.api_key else 0,
         }
 
 
-def _parsear_json(texto: str) -> dict:
+def _parsear_json(texto: str) -> dict | None:
     texto = texto.strip()
     texto = re.sub(r"^```(?:json)?|```$", "", texto, flags=re.M).strip()
     try:
@@ -346,5 +386,8 @@ def _parsear_json(texto: str) -> dict:
     except json.JSONDecodeError:
         m = re.search(r"\{.*\}", texto, re.S)
         if not m:
-            raise
-        return json.loads(m.group(0))
+            return None
+        try:
+            return json.loads(m.group(0))
+        except json.JSONDecodeError:
+            return None

@@ -69,10 +69,14 @@ POR_DEFECTO: dict[str, dict[str, Any]] = {
             "max_solicitudes_dia": 50,
             "solicitudes_por_minuto": 12,
             "max_solicitudes_corrida": 600,
+            "timeout_segundos": 60,
+            "max_fallos_consecutivos_lote": 8,
+            "max_fallos_json_corrida": 200,
         },
         "descripcion": "Clasificación con OpenRouter solo para ofertas dudosas. Modelo fijo openrouter/free "
                        "(tier gratuito ~20 req/min; cupo diario según créditos OpenRouter, p. ej. 50–1000/día). "
-                       "solicitudes_por_minuto conservador (12) para evitar 429.",
+                       "solicitudes_por_minuto conservador (12) para evitar 429. Tras muchos JSON inválidos "
+                       "o respuestas cortadas, el resto usa reglas sin tumbar la corrida.",
     },
     "reglas_carrera": {
         "valor": {

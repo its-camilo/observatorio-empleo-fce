@@ -115,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--ubicaciones", type=int, help="Máximo de ciudades (prueba)")
     p.add_argument("--max", type=int, dest="max_por_particion", help="Máximo de ofertas por término y ciudad")
     p.add_argument("--sin-llm", action="store_true")
+    p.add_argument("--sin-mini", action="store_true", help="No lanzar mini corrida al consolidar")
+    p.add_argument("--solo-consolidar", action="store_true", help="Solo re-procesar crudas existentes (sin nueva extracción)")
     p.add_argument("--sin-cursos", action="store_true")
     p.add_argument("--ejecutado-por")
     p.add_argument("--salida", default="observatorio.xlsx")
@@ -168,12 +170,24 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"::warning title=Corrida {e.estado}::La corrida terminó en estado {e.estado}.")
             return 0 if e.estado in ("completada", "incompleta") else 1
         if a.accion == "preparar":
-            e = orq.preparar(s, a.semestre, a.corte, a.run_id, a.ejecutado_por, a.modo, fuentes, a.terminos, a.ubicaciones,
-                             a.max_por_particion, ejecutor="github" if os.getenv("GITHUB_ACTIONS") else "local")
+            e = orq.preparar(
+                s,
+                a.semestre,
+                a.corte,
+                a.run_id,
+                a.ejecutado_por,
+                a.modo,
+                fuentes,
+                a.terminos,
+                a.ubicaciones,
+                a.max_por_particion,
+                ejecutor="github" if os.getenv("GITHUB_ACTIONS") else "local",
+                solo_consolidar=a.solo_consolidar,
+            )
             s.commit()
             max_m = float(os.getenv("OBSERVATORIO_MAX_MINUTOS_EXTRACCION", "320") or 320)
             filtro = [x.strip() for x in a.fuentes.split(",")] if a.fuentes else None
-            m_fuentes = orq.matriz_extraccion_fuentes(s, e.id_ejecucion, max_m, filtro)
+            m_fuentes = [] if a.solo_consolidar else orq.matriz_extraccion_fuentes(s, e.id_ejecucion, max_m, filtro)
             m = orq.matriz(s, e.id_ejecucion)
             print(json.dumps({"id_ejecucion": e.id_ejecucion, "matriz_fuentes": m_fuentes, "matriz": m}, ensure_ascii=False))
             if a.github_output:
@@ -208,10 +222,18 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if a.accion == "consolidar":
             try:
-                e = orq.consolidar(s, a.run_id, usar_llm=not a.sin_llm)
+                e = orq.consolidar(
+                    s,
+                    a.run_id,
+                    usar_llm=not a.sin_llm,
+                    permitir_mini=not a.sin_mini,
+                )
             except Exception:
+                logging.exception("Consolidación falló para %s", a.run_id)
                 return 1
             imprimir_reporte(e)
+            if e.fase == "terminada":
+                return 0
             return 0 if e.estado in ("completada", "incompleta") else 1
         if a.accion == "cerrar-corrida":
             motivo = a.motivo or os.getenv("CORRIDA_CIERRE_MOTIVO") or "Workflow de GitHub Actions terminó con errores."
