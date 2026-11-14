@@ -4,9 +4,9 @@ name: Corrida del Observatorio
 # (herramienta lanzar_corrida, solo admins) o a mano en Actions → "Run workflow".
 # Escribe directamente en Postgres (secreto DATABASE_URL).
 #
-# Flujo: preparar (crea la ejecución y las consultas) → extraer (secuencial:
-# LinkedIn primero, luego demás fuentes) + cursos → consolidar (limpieza, duplicados,
-# clasificación, softwares, mini corrida si no se llega a la meta, reporte).
+# Flujo: preparar (crea la ejecución y las consultas) → extraer (matriz: un job
+# concurrente por fuente con cupo y tiempo proporcionales) + cursos → consolidar
+# (espera a que terminen todos los jobs de extracción).
 # Si algo se interrumpe, vuelva a lanzar con el MISMO run_id: retoma sin duplicar.
 
 run-name: "Corrida ${{ inputs.semestre }} ${{ inputs.corte }} (${{ inputs.run_id || 'nueva' }})"
@@ -39,6 +39,11 @@ on:
         required: false
         type: string
         default: ""
+      fuentes:
+        description: "Reanudar: lista opcional (linkedin,indeed,computrabajo). Vacío = todas."
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: observatorio-corrida-${{ inputs.semestre }}-${{ inputs.corte }}
@@ -49,6 +54,7 @@ env:
   OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
   PROXIES: ${{ secrets.PROXIES }}
   PYTHONUNBUFFERED: "1"
+  OBSERVATORIO_MAX_MINUTOS_EXTRACCION: "320"
 
 jobs:
   preparar:
@@ -57,7 +63,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       run_id: ${{ steps.prep.outputs.run_id }}
-      matriz: ${{ steps.prep.outputs.matriz }}
+      matriz_fuentes: ${{ steps.prep.outputs.matriz_fuentes }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -70,18 +76,27 @@ jobs:
         run: python -m observatorio.run migrar
       - name: Crear ejecución y consultas
         id: prep
+        env:
+          FUENTES_FILTRO: ${{ inputs.fuentes }}
         run: |
           EXTRA=""
           if [ "${{ inputs.modo }}" = "prueba" ]; then EXTRA="--prueba"; fi
+          FARG=""
+          if [ -n "$FUENTES_FILTRO" ]; then FARG="--fuentes $FUENTES_FILTRO"; fi
           python -m observatorio.run preparar --semestre "${{ inputs.semestre }}" --corte "${{ inputs.corte }}" \
             --run-id "${{ inputs.run_id }}" --ejecutado-por "${{ inputs.ejecutado_por || github.actor }}" \
-            --github-output "$GITHUB_OUTPUT" $EXTRA
+            --github-output "$GITHUB_OUTPUT" $EXTRA $FARG
 
   extraer:
-    name: Extraer ofertas (LinkedIn primero)
+    name: Extraer ${{ matrix.fuente }}
     needs: preparar
+    if: ${{ needs.preparar.outputs.matriz_fuentes != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.preparar.outputs.matriz_fuentes).include }}
     runs-on: ubuntu-latest
-    timeout-minutes: 340
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -90,10 +105,10 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-scraper.txt
       - run: pip install -r requirements-scraper.txt
-      - name: Extraer ofertas
+      - name: Extraer ofertas (${{ matrix.fuente }})
         run: |
-          python -m observatorio.run extraer-secuencial --run-id "${{ needs.preparar.outputs.run_id }}" \
-            --max-minutos 320
+          python -m observatorio.run extraer-fuente --run-id "${{ needs.preparar.outputs.run_id }}" \
+            --fuente "${{ matrix.fuente }}" --max-minutos "${{ matrix.max_minutos }}"
 
   cursos:
     name: Cursos en tendencia

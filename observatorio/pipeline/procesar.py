@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from observatorio.db.modelos import Ejecucion, NoCatalogado, Oferta, OfertaCruda, OfertaSoftware, ahora
@@ -168,7 +169,12 @@ class Procesador:
             if c.estado == "dudosa":
                 dudosas.append(u)
         if dudosas:
-            respuestas = self.llm.clasificar([{"id": u["id_oferta"], **u} for u in dudosas]) if self.llm.habilitado else {}
+            try:
+                respuestas = self.llm.clasificar([{"id": u["id_oferta"], **u} for u in dudosas]) if self.llm.habilitado else {}
+            except OperationalError:
+                from observatorio.db.crudas import asegurar_sesion_activa
+                asegurar_sesion_activa(self.s)
+                raise
             for u in dudosas:
                 c = clasif[u["id_oferta"]]
                 res = respuestas.get(u["id_oferta"])
