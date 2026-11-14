@@ -538,7 +538,7 @@ def _procesar_con_reintento(s: Session, ejec: Ejecucion, cfg: dict, usar_llm: bo
 
     Cada bloque se confirma al terminar, así que un reintento retoma desde el bloque que se perdió.
     """
-    from sqlalchemy.exc import OperationalError
+    from observatorio.db.crudas import ERRORES_CONEXION_BD, esperar_backoff_reintento, recuperar_sesion_db
     from observatorio.pipeline.procesar import Procesador
 
     proc = Procesador(s, ejec, cfg, usar_llm=usar_llm)
@@ -546,17 +546,21 @@ def _procesar_con_reintento(s: Session, ejec: Ejecucion, cfg: dict, usar_llm: bo
         try:
             proc.procesar_pendientes()
             return proc
-        except OperationalError as e:
+        except ERRORES_CONEXION_BD as e:
+            recuperar_sesion_db(s)
             try:
-                s.rollback()
+                s.refresh(ejec)
             except Exception:  # noqa: BLE001
                 pass
             if i == intentos - 1:
                 raise
-            log.warning("Se perdió la conexión con la base al procesar (intento %d/%d); se reintenta: %s",
-                        i + 1, intentos, str(e).splitlines()[0][:200])
-            time.sleep(5 * (i + 1))
-            asegurar_sesion_activa(s)
+            log.warning(
+                "Se perdió la conexión con la base al procesar (intento %d/%d); se reintenta: %s",
+                i + 1,
+                intentos,
+                str(e).splitlines()[0][:200],
+            )
+            esperar_backoff_reintento(i)
             proc = Procesador(s, ejec, cfg, usar_llm=usar_llm)
     return proc
 
