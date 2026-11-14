@@ -170,11 +170,18 @@ class Procesador:
                 dudosas.append(u)
         if dudosas:
             try:
-                respuestas = self.llm.clasificar([{"id": u["id_oferta"], **u} for u in dudosas]) if self.llm.habilitado else {}
+                respuestas = (
+                    self.llm.clasificar([{"id": u["id_oferta"], **u} for u in dudosas])
+                    if self.llm.habilitado
+                    else {}
+                )
             except OperationalError:
                 from observatorio.db.crudas import asegurar_sesion_activa
                 asegurar_sesion_activa(self.s)
                 raise
+            except Exception as e:  # noqa: BLE001 — el LLM no debe tumbar la consolidación
+                log.warning("Clasificación LLM interrumpida en bloque; se usan reglas de respaldo: %s", e)
+                respuestas = {}
             for u in dudosas:
                 c = clasif[u["id_oferta"]]
                 res = respuestas.get(u["id_oferta"])
