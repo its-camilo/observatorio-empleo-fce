@@ -21,7 +21,7 @@ import requests
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from observatorio.db.crudas import liberar_conexion_para_espera
+from observatorio.db.crudas import ERRORES_CONEXION_BD, liberar_conexion_para_espera, recuperar_sesion_db
 
 from observatorio.config import MODELO_OPENROUTER_GRATIS, ajustes
 from observatorio.texto import hash_texto
@@ -309,6 +309,7 @@ class ClienteLLM:
         pendientes = pendientes_llm
         if not self.habilitado:
             return salida
+        liberar_conexion_para_espera(self.s)
         sistema = PROMPT_SISTEMA.format(carreras=", ".join(self.carreras))
         for i in range(0, len(pendientes), self.tamano_lote):
             if not self.hay_cupo():
@@ -357,9 +358,8 @@ class ClienteLLM:
             self._volcar_cache()
             self._guardar_uso()
             self.s.flush()
-        except OperationalError:
-            asegurar = __import__("observatorio.db.crudas", fromlist=["asegurar_sesion_activa"]).asegurar_sesion_activa
-            asegurar(self.s)
+        except ERRORES_CONEXION_BD:
+            recuperar_sesion_db(self.s)
             self._volcar_cache()
             self._guardar_uso()
             self.s.flush()

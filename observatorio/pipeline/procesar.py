@@ -8,8 +8,14 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from sqlalchemy import select
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+
+from observatorio.db.crudas import (
+    ERRORES_CONEXION_BD,
+    esperar_backoff_reintento,
+    liberar_conexion_para_espera,
+    recuperar_sesion_db,
+)
 
 from observatorio.db.modelos import Ejecucion, NoCatalogado, Oferta, OfertaCruda, OfertaSoftware, ahora
 from observatorio.pipeline.clasificacion import ClasificadorReglas, Clasificacion
@@ -26,6 +32,7 @@ from observatorio.texto import es_colombia, normalizar_clave
 log = logging.getLogger("observatorio.procesar")
 
 TAMANO_BLOQUE = 1500
+REINTENTOS_BLOQUE = 3
 
 
 @dataclass
@@ -169,17 +176,20 @@ class Procesador:
             if c.estado == "dudosa":
                 dudosas.append(u)
         if dudosas:
+            liberar_conexion_para_espera(self.s)
             try:
                 respuestas = (
                     self.llm.clasificar([{"id": u["id_oferta"], **u} for u in dudosas])
                     if self.llm.habilitado
                     else {}
                 )
-            except OperationalError:
-                from observatorio.db.crudas import asegurar_sesion_activa
-                asegurar_sesion_activa(self.s)
+            except ERRORES_CONEXION_BD:
+                recuperar_sesion_db(self.s)
                 raise
             except Exception as e:  # noqa: BLE001 — el LLM no debe tumbar la consolidación
+                if "Connection is closed" in str(e):
+                    recuperar_sesion_db(self.s)
+                    raise
                 log.warning("Clasificación LLM interrumpida en bloque; se usan reglas de respaldo: %s", e)
                 respuestas = {}
             for u in dudosas:
@@ -268,21 +278,60 @@ class Procesador:
     def procesar_pendientes(self) -> ResultadoProceso:
         """Procesa todas las crudas no procesadas de la ejecución, por bloques."""
         while True:
-            bloque = list(self.s.scalars(
-                select(OfertaCruda).where(OfertaCruda.id_ejecucion == self.ejec.id_ejecucion, OfertaCruda.procesada.is_(False))
-                .order_by(OfertaCruda.id).limit(TAMANO_BLOQUE)))
+            bloque = list(
+                self.s.scalars(
+                    select(OfertaCruda).where(
+                        OfertaCruda.id_ejecucion == self.ejec.id_ejecucion,
+                        OfertaCruda.procesada.is_(False),
+                    )
+                    .order_by(OfertaCruda.id)
+                    .limit(TAMANO_BLOQUE)
+                )
+            )
             if not bloque:
                 break
-            r = self.procesar_bloque(bloque)
-            self.total.sumar(r)
-            self.total.no_catalogados.update(r.no_catalogados)
-            for k, v in r.originales_nc.items():
-                self.total.originales_nc.setdefault(k, v)
-            for k, v in r.ejemplo_nc.items():
-                self.total.ejemplo_nc.setdefault(k, v)
-            self.s.commit()
-            log.info("Procesadas %d ofertas crudas: %d guardadas, %d duplicadas, %d no relevantes",
-                     r.crudas, r.guardadas, r.duplicados, r.no_relevantes)
+            ids_bloque = [c.id for c in bloque]
+            for intento in range(REINTENTOS_BLOQUE):
+                try:
+                    if intento > 0:
+                        bloque = list(
+                            self.s.scalars(
+                                select(OfertaCruda).where(OfertaCruda.id.in_(ids_bloque)).order_by(OfertaCruda.id)
+                            )
+                        )
+                    r = self.procesar_bloque(bloque)
+                    self.total.sumar(r)
+                    self.total.no_catalogados.update(r.no_catalogados)
+                    for k, v in r.originales_nc.items():
+                        self.total.originales_nc.setdefault(k, v)
+                    for k, v in r.ejemplo_nc.items():
+                        self.total.ejemplo_nc.setdefault(k, v)
+                    self.s.commit()
+                    log.info(
+                        "Procesadas %d ofertas crudas: %d guardadas, %d duplicadas, %d no relevantes",
+                        r.crudas,
+                        r.guardadas,
+                        r.duplicados,
+                        r.no_relevantes,
+                    )
+                    break
+                except ERRORES_CONEXION_BD as e:
+                    recuperar_sesion_db(self.s)
+                    try:
+                        self.s.refresh(self.ejec)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    if intento >= REINTENTOS_BLOQUE - 1:
+                        raise
+                    log.warning(
+                        "Conexión BD perdida en bloque (intento %d/%d); se reintenta: %s",
+                        intento + 1,
+                        REINTENTOS_BLOQUE,
+                        str(e).splitlines()[0][:200],
+                    )
+                    esperar_backoff_reintento(intento)
+            else:
+                raise RuntimeError("bloque no procesado tras reintentos")
         return self.total
 
     def guardar_no_catalogados(self) -> int:

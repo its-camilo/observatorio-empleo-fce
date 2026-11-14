@@ -34,7 +34,7 @@ def motor(url: str | None = None) -> Engine:
             kwargs["poolclass"] = NullPool
             kwargs["connect_args"] = {"connect_timeout": int(os.getenv("DB_CONNECT_TIMEOUT", "8") or 8)}
         else:
-            kwargs.update(pool_size=3, max_overflow=2, pool_recycle=240)
+            kwargs.update(pool_size=3, max_overflow=2, pool_recycle=300)
             # Keepalives TCP: los runners de GitHub (Azure) cortan conexiones inactivas ~4 min y Neon cierra el SSL.
             # Pasa mientras se espera a OpenRouter o a una fuente con la transacción abierta.
             kwargs["connect_args"] = {

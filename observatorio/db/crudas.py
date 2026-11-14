@@ -1,8 +1,11 @@
 """Escritura de ofertas crudas tolerante a duplicados (varios fragmentos GHA en paralelo)."""
 from __future__ import annotations
 
+import time
+
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DisconnectionError, IntegrityError, OperationalError
+from sqlalchemy.exc import ResourceClosedError
 from sqlalchemy.orm import Session
 
 from observatorio.db.modelos import OfertaCruda
@@ -59,22 +62,58 @@ def commit_extraccion(s: Session) -> None:
 def asegurar_sesion_activa(s: Session) -> None:
     """Tras un error de BD, la sesión queda invalidada hasta hacer rollback."""
     if not s.is_active:
-        s.rollback()
+        try:
+            s.rollback()
+        except Exception:  # noqa: BLE001
+            pass
 
 
-def liberar_conexion_para_espera(s: Session) -> None:
-    """Confirma trabajo pendiente y devuelve la conexión al pool antes de esperas largas (p. ej. OpenRouter).
+ERRORES_CONEXION_BD = (OperationalError, ResourceClosedError, DisconnectionError)
 
-    En SQLite (pruebas) solo confirma; en Postgres cierra la conexión para no mantener SSL ocioso en Neon.
-    """
+
+def es_error_conexion_bd(exc: BaseException) -> bool:
+    if isinstance(exc, ERRORES_CONEXION_BD):
+        return True
+    causa = getattr(exc, "orig", None)
+    return isinstance(causa, ERRORES_CONEXION_BD)
+
+
+def recuperar_sesion_db(s: Session) -> None:
+    """Tras pérdida de conexión: revierte, invalida el socket y deja la sesión lista para un checkout nuevo."""
     try:
-        s.commit()
-    except Exception:
         s.rollback()
+    except Exception:  # noqa: BLE001
+        pass
     url = str(s.get_bind().url)
     if url.startswith("sqlite"):
         return
     try:
-        s.connection().close()
-    except Exception:
+        s.connection().invalidate()
+    except Exception:  # noqa: BLE001
         pass
+
+
+def liberar_conexion_para_espera(s: Session) -> None:
+    """Confirma trabajo pendiente e invalida la conexión antes de esperas largas (p. ej. OpenRouter).
+
+    No usar ``connection.close()``: deja la transacción desasociada y falla el siguiente ``flush()``.
+    En Postgres/Neon se invalida el socket para que el pool entregue otra conexión al volver a la BD.
+    """
+    try:
+        s.commit()
+    except Exception:  # noqa: BLE001
+        try:
+            s.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+    url = str(s.get_bind().url)
+    if url.startswith("sqlite"):
+        return
+    try:
+        s.connection().invalidate()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def esperar_backoff_reintento(intento: int, base: float = 5.0) -> None:
+    time.sleep(base * (intento + 1))
