@@ -76,7 +76,7 @@ def test_preparar_reanudacion_no_sobrescribe_presupuestos_ni_particiones(sesion,
     n_antes = sesion.scalar(select(func.count()).select_from(Particion).where(Particion.id_ejecucion == ejec.id_ejecucion))
     params_antes = dict(ejec.parametros)
 
-    cfg_vieja = leer_config(sesion)
+    cfg_vieja = orq.leer_config(sesion)
     cfg_nueva = {**cfg_vieja, "distribucion_fuentes": {"linkedin": 10, "indeed": 80, "computrabajo": 10}}
     monkeypatch.setattr(orq, "leer_config", lambda _s: cfg_nueva)
 
