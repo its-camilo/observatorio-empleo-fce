@@ -60,3 +60,21 @@ def asegurar_sesion_activa(s: Session) -> None:
     """Tras un error de BD, la sesión queda invalidada hasta hacer rollback."""
     if not s.is_active:
         s.rollback()
+
+
+def liberar_conexion_para_espera(s: Session) -> None:
+    """Confirma trabajo pendiente y devuelve la conexión al pool antes de esperas largas (p. ej. OpenRouter).
+
+    En SQLite (pruebas) solo confirma; en Postgres cierra la conexión para no mantener SSL ocioso en Neon.
+    """
+    try:
+        s.commit()
+    except Exception:
+        s.rollback()
+    url = str(s.get_bind().url)
+    if url.startswith("sqlite"):
+        return
+    try:
+        s.connection().close()
+    except Exception:
+        pass

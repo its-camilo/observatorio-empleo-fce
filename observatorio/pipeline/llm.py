@@ -18,7 +18,10 @@ import time
 from datetime import date
 
 import requests
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
+
+from observatorio.db.crudas import liberar_conexion_para_espera
 
 from observatorio.config import MODELO_OPENROUTER_GRATIS, ajustes
 from observatorio.texto import hash_texto
@@ -164,6 +167,7 @@ class ClienteLLM:
         for intento in range(MAX_REINTENTOS):
             espera = self.intervalo - (time.time() - self._ultima)
             if espera > 0:
+                liberar_conexion_para_espera(self.s)
                 time.sleep(espera)
             self._ultima = time.time()
             try:
@@ -195,7 +199,9 @@ class ClienteLLM:
                     contenido = r.json()["choices"][0]["message"]["content"]
                     self.solicitudes += 1
                     self._sumar_uso()
-                    return _parsear_json(contenido), self.modelo
+                    return _parsear_json(contenido or ""), self.modelo
+                except OperationalError:
+                    raise
                 except Exception as e:  # respuesta mal formada
                     log.info("Respuesta no válida de OpenRouter: %s", e)
                     self.errores += 1
@@ -208,6 +214,7 @@ class ClienteLLM:
                     return None, ""
                 espera_429 = _espera_429(r, intento)
                 log.info("OpenRouter 429 (intento %d/%d); espera %.0fs — %s", intento + 1, MAX_REINTENTOS, espera_429, detalle[:120])
+                liberar_conexion_para_espera(self.s)
                 time.sleep(espera_429)
                 continue
 
@@ -228,17 +235,40 @@ class ClienteLLM:
 
         return None, ""
 
+    def _caches_lote(self, hashes: list[str]) -> dict[str, dict]:
+        from sqlalchemy import select
+
+        from observatorio.db.modelos import LlmCache
+
+        if not hashes:
+            return {}
+        encontrados: dict[str, dict] = {}
+        for i in range(0, len(hashes), 200):
+            lote = hashes[i : i + 200]
+            for fila in self.s.scalars(select(LlmCache).where(LlmCache.hash.in_(lote))):
+                encontrados[fila.hash] = fila.resultado
+        return encontrados
+
     def clasificar(self, ofertas: list[dict]) -> dict[str, dict]:
+        from sqlalchemy import select
+
         salida: dict[str, dict] = {}
         pendientes = []
+        hashes_pend = []
         for o in ofertas:
             h = self.clave(o)
-            c = self._cache(h)
+            pendientes.append((h, o))
+            hashes_pend.append(h)
+        en_bd = self._caches_lote(hashes_pend)
+        pendientes_llm = []
+        for h, o in pendientes:
+            c = en_bd.get(h)
             if c is not None:
                 salida[o["id"]] = c
                 self.desde_cache += 1
             else:
-                pendientes.append((h, o))
+                pendientes_llm.append((h, o))
+        pendientes = pendientes_llm
         if not self.habilitado:
             return salida
         sistema = PROMPT_SISTEMA.format(carreras=", ".join(self.carreras))
@@ -284,9 +314,16 @@ class ClienteLLM:
                 salida[o["id"]] = res
                 self._guardar_cache(h, res, modelo)
         # La BD se toca sólo al final, cuando ya no hay esperas largas por la red
-        self._volcar_cache()
-        self._guardar_uso()
-        self.s.flush()
+        try:
+            self._volcar_cache()
+            self._guardar_uso()
+            self.s.flush()
+        except OperationalError:
+            asegurar = __import__("observatorio.db.crudas", fromlist=["asegurar_sesion_activa"]).asegurar_sesion_activa
+            asegurar(self.s)
+            self._volcar_cache()
+            self._guardar_uso()
+            self.s.flush()
         return salida
 
     def resumen(self) -> dict:

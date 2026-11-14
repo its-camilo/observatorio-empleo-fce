@@ -96,6 +96,23 @@ def max_particiones_fuente(presupuesto: int, max_por_particion: int) -> int:
     return max(1, math.ceil(presupuesto / max_por_particion))
 
 
+def minutos_por_fuente(
+    max_minutos: float | None,
+    objetivo: int,
+    presupuesto_fuentes: dict[str, int],
+    fuentes: list[str],
+) -> dict[str, float | None]:
+    """Reparto de tiempo de extracción proporcional al cupo de cada fuente (evita que LinkedIn consuma todo el job)."""
+    if max_minutos is None or max_minutos <= 0 or not fuentes:
+        return {f: max_minutos for f in fuentes}
+    if objetivo > 0 and presupuesto_fuentes:
+        return {
+            f: max(2.0, max_minutos * int(presupuesto_fuentes.get(f, 0)) / objetivo)
+            for f in fuentes
+        }
+    return {f: max_minutos / len(fuentes) for f in fuentes}
+
+
 def presupuesto_fuente_carrera(presupuesto_fuentes: dict[str, int], cfg: dict) -> dict[str, dict[str, int]]:
     """Cupo de cada fuente repartido entre carreras (así ninguna carrera se queda sin consultas en ninguna fuente)."""
     salida: dict[str, dict[str, int]] = {}

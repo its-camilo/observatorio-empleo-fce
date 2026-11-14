@@ -25,8 +25,8 @@ import os
 import sys
 
 ACCIONES = (
-    "completa", "preparar", "extraer", "extraer-secuencial", "cursos", "consolidar", "reporte", "exportar",
-    "migrar", "semilla", "purga-operativa", "purga-reglas", "cerrar-corrida", "cerrar-colgadas",
+    "completa", "preparar", "extraer", "extraer-fuente", "extraer-secuencial", "cursos", "consolidar", "reporte",
+    "exportar", "migrar", "semilla", "purga-operativa", "purga-reglas", "cerrar-corrida", "cerrar-colgadas",
 )
 
 # Comandos de mantenimiento / export que no requieren id de ejecución de corrida.
@@ -171,17 +171,28 @@ def main(argv: list[str] | None = None) -> int:
             e = orq.preparar(s, a.semestre, a.corte, a.run_id, a.ejecutado_por, a.modo, fuentes, a.terminos, a.ubicaciones,
                              a.max_por_particion, ejecutor="github" if os.getenv("GITHUB_ACTIONS") else "local")
             s.commit()
+            max_m = float(os.getenv("OBSERVATORIO_MAX_MINUTOS_EXTRACCION", "320") or 320)
+            filtro = [x.strip() for x in a.fuentes.split(",")] if a.fuentes else None
+            m_fuentes = orq.matriz_extraccion_fuentes(s, e.id_ejecucion, max_m, filtro)
             m = orq.matriz(s, e.id_ejecucion)
-            print(json.dumps({"id_ejecucion": e.id_ejecucion, "matriz": m}, ensure_ascii=False))
+            print(json.dumps({"id_ejecucion": e.id_ejecucion, "matriz_fuentes": m_fuentes, "matriz": m}, ensure_ascii=False))
             if a.github_output:
                 with open(a.github_output, "a", encoding="utf-8") as f:
                     f.write(f"run_id={e.id_ejecucion}\n")
+                    f.write(f"matriz_fuentes={json.dumps({'include': m_fuentes})}\n")
                     f.write(f"matriz={json.dumps({'include': m})}\n")
             return 0
         if not a.run_id and a.accion not in ACCIONES_SIN_RUN_ID:
             p.error("Indique --run-id")
         if a.accion == "extraer-secuencial":
-            resumenes = orq.extraer_secuencial(s, a.run_id, a.max_minutos)
+            filtro = [x.strip() for x in a.fuentes.split(",")] if a.fuentes else None
+            resumenes = orq.extraer_secuencial(s, a.run_id, a.max_minutos, filtro)
+            print(json.dumps(resumenes, ensure_ascii=False))
+            return 0
+        if a.accion == "extraer-fuente":
+            if not a.fuente:
+                p.error("Indique --fuente")
+            resumenes = orq.extraer_fuente(s, a.run_id, a.fuente, max_minutos=a.max_minutos)
             print(json.dumps(resumenes, ensure_ascii=False))
             return 0
         if a.accion == "extraer":

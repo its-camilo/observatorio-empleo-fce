@@ -23,6 +23,7 @@ from observatorio.parametros import leer_config
 from observatorio.plan_extraccion import (
     fuentes_para_corrida,
     max_particiones_fuente,
+    minutos_por_fuente,
     objetivo_ofertas_corrida,
     ordenar_fuentes,
     presupuesto_fuente_carrera,
@@ -120,47 +121,59 @@ def preparar(s: Session, semestre: str, corte: str, id_ejecucion: str | None = N
     ejec.estado = "en_curso"
     ejec.fase = "preparada"
     ejec.inicio = ejec.inicio or ahora()
-    objetivo = objetivo_ofertas_corrida(cfg, ejec.parametros)
-    ejec.meta_ofertas = objetivo
     if os.getenv("GITHUB_RUN_ID"):
         ejec.github_run_url = f"{os.getenv('GITHUB_SERVER_URL', 'https://github.com')}/{os.getenv('GITHUB_REPOSITORY')}/actions/runs/{os.getenv('GITHUB_RUN_ID')}"
 
-    activas = fuentes_para_corrida(cfg, fuentes)
-    presupuesto = presupuesto_por_fuente(objetivo, activas, cfg) if objetivo > 0 else {}
-    presupuesto_carreras = presupuesto_por_carrera(objetivo, cfg) if objetivo > 0 else {}
-    ejec.parametros = {
-        **(ejec.parametros or {}),
-        "objetivo_ofertas_corrida": objetivo,
-        "presupuesto_fuentes": presupuesto,
-        "presupuesto_carreras": presupuesto_carreras,
-        "presupuesto_fuente_carrera": presupuesto_fuente_carrera(presupuesto, cfg),
-    }
-    ejec.fuentes = ", ".join(NOMBRES_FUENTE[f] for f in activas)
+    params = ejec.parametros or {}
+    n_particiones = s.scalar(select(func.count()).select_from(Particion).where(Particion.id_ejecucion == id_ejecucion)) or 0
+    presupuesto_congelado = bool(
+        params.get("presupuesto_fuentes")
+        and params.get("presupuesto_carreras")
+        and params.get("presupuesto_fuente_carrera")
+        and n_particiones > 0
+    )
 
-    terminos = list(s.scalars(select(TerminoBusqueda).where(TerminoBusqueda.activo.is_(True), TerminoBusqueda.tipo == "principal")
-                              .order_by(TerminoBusqueda.carrera, TerminoBusqueda.id)))
-    if limite_terminos:
-        # repartir el límite entre carreras para que haya de las tres
-        por_carrera: dict[str, list] = {}
-        for t in terminos:
-            por_carrera.setdefault(t.carrera, []).append(t)
-        terminos, i = [], 0
-        while len(terminos) < limite_terminos and any(i < len(v) for v in por_carrera.values()):
-            for v in por_carrera.values():
-                if i < len(v) and len(terminos) < limite_terminos:
-                    terminos.append(v[i])
-            i += 1
-    ejec.terminos_usados = sorted({f"{t.carrera}: {t.termino}" for t in terminos})
-    ubicaciones = cfg["ubicaciones"][:limite_ubicaciones] if limite_ubicaciones else cfg["ubicaciones"]
-    crear_particiones(s, ejec, activas, terminos, ubicaciones, cfg, mini=False, max_por_particion=max_por_particion)
+    if presupuesto_congelado:
+        objetivo = int(params.get("objetivo_ofertas_corrida") or 0)
+        activas = ordenar_fuentes(list(params["presupuesto_fuentes"].keys()))
+        ejec.meta_ofertas = objetivo or ejec.meta_ofertas
+        log.info("Reanudación %s: se conservan presupuestos congelados (%d particiones existentes)",
+                 id_ejecucion, n_particiones)
+    else:
+        objetivo = objetivo_ofertas_corrida(cfg, params)
+        ejec.meta_ofertas = objetivo
+        activas = fuentes_para_corrida(cfg, fuentes)
+        presupuesto = presupuesto_por_fuente(objetivo, activas, cfg) if objetivo > 0 else {}
+        presupuesto_carreras = presupuesto_por_carrera(objetivo, cfg) if objetivo > 0 else {}
+        ejec.parametros = {
+            **params,
+            "objetivo_ofertas_corrida": objetivo,
+            "presupuesto_fuentes": presupuesto,
+            "presupuesto_carreras": presupuesto_carreras,
+            "presupuesto_fuente_carrera": presupuesto_fuente_carrera(presupuesto, cfg),
+        }
+        ejec.fuentes = ", ".join(NOMBRES_FUENTE[f] for f in activas)
+        terminos = list(s.scalars(select(TerminoBusqueda).where(TerminoBusqueda.activo.is_(True), TerminoBusqueda.tipo == "principal")
+                                  .order_by(TerminoBusqueda.carrera, TerminoBusqueda.id)))
+        if limite_terminos:
+            por_carrera: dict[str, list] = {}
+            for t in terminos:
+                por_carrera.setdefault(t.carrera, []).append(t)
+            terminos, i = [], 0
+            while len(terminos) < limite_terminos and any(i < len(v) for v in por_carrera.values()):
+                for v in por_carrera.values():
+                    if i < len(v) and len(terminos) < limite_terminos:
+                        terminos.append(v[i])
+                i += 1
+        ejec.terminos_usados = sorted({f"{t.carrera}: {t.termino}" for t in terminos})
+        ubicaciones = cfg["ubicaciones"][:limite_ubicaciones] if limite_ubicaciones else cfg["ubicaciones"]
+        crear_particiones(s, ejec, activas, terminos, ubicaciones, cfg, mini=False, max_por_particion=max_por_particion)
     s.flush()
     return ejec
 
 
 FACTOR_CONSULTAS = 4  # consultas planeadas por cada consulta "llena" que cabría en el cupo
 MIN_CONSULTAS_CARRERA = 4  # mínimo de consultas por fuente y carrera
-RONDAS_RELLENO = 3  # rondas extra si la corrida no llega al objetivo
-CONSULTAS_RELLENO = 6  # consultas nuevas por fuente y carrera en cada ronda
 
 
 def crear_particiones(s: Session, ejec: Ejecucion, fuentes: list[str], terminos, ubicaciones: list[dict], cfg: dict,
@@ -231,7 +244,7 @@ def crear_particiones(s: Session, ejec: Ejecucion, fuentes: list[str], terminos,
 
 
 def matriz(s: Session, id_ejecucion: str) -> list[dict]:
-    """Trabajos paralelos para GitHub Actions: un elemento por fuente × fragmento (LinkedIn primero)."""
+    """Trabajos paralelos para GitHub Actions: un elemento por fuente × fragmento (uso local / legado)."""
     cfg = leer_config(s)
     fuentes = ordenar_fuentes(
         [f for (f,) in s.execute(select(Particion.fuente).where(Particion.id_ejecucion == id_ejecucion).distinct())]
@@ -241,6 +254,57 @@ def matriz(s: Session, id_ejecucion: str) -> list[dict]:
         n = max(1, int(cfg["fuentes"].get(f, {}).get("fragmentos", 1)))
         salida.extend({"fuente": f, "fragmento": i, "fragmentos": n} for i in range(n))
     return salida
+
+
+def matriz_extraccion_fuentes(
+    s: Session,
+    id_ejecucion: str,
+    max_minutos_total: float = 320,
+    fuentes_filtradas: list[str] | None = None,
+) -> list[dict]:
+    """Un job de GitHub Actions por fuente (paralelos): cada uno recibe el tiempo completo del job.
+
+    El reparto proporcional de minutos aplica solo a ``extraer_secuencial`` (extracción local en serie).
+    """
+    ejec = s.get(Ejecucion, id_ejecucion)
+    if ejec and (ejec.parametros or {}).get("presupuesto_fuentes"):
+        fuentes = ordenar_fuentes(list((ejec.parametros or {})["presupuesto_fuentes"].keys()))
+    else:
+        fuentes = ordenar_fuentes(
+            [f for (f,) in s.execute(select(Particion.fuente).where(Particion.id_ejecucion == id_ejecucion).distinct())]
+        )
+    if fuentes_filtradas:
+        permitidas = {x.strip().lower() for x in fuentes_filtradas if x.strip()}
+        fuentes = [f for f in fuentes if f in permitidas]
+    if not fuentes:
+        return []
+    t = round(float(max_minutos_total), 1)
+    return [{"fuente": f, "max_minutos": t} for f in fuentes]
+
+
+def extraer_fuente(
+    s: Session,
+    id_ejecucion: str,
+    fuente: str,
+    max_minutos: float | None = None,
+) -> list[dict]:
+    """Todos los fragmentos de una fuente en un solo proceso (job paralelo en Actions)."""
+    cfg = leer_config(s)
+    n_frag = max(1, int(cfg["fuentes"].get(fuente, {}).get("fragmentos", 1)))
+    t0 = time.time()
+    resumenes: list[dict] = []
+    for frag in range(n_frag):
+        restante = None
+        if max_minutos is not None:
+            restante = max_minutos - (time.time() - t0) / 60
+            if restante <= 0:
+                log.info("[%s] Tiempo asignado a esta fuente agotado en fragmento %d/%d", fuente, frag + 1, n_frag)
+                break
+        resumenes.append(extraer(s, id_ejecucion, fuente, frag, n_frag, max_minutos=restante))
+        ultimo = resumenes[-1]
+        if ultimo.get("tope_alcanzado") or ultimo.get("cupo_fuente_alcanzado") or ultimo.get("bloqueada"):
+            break
+    return resumenes
 
 
 # ---------------------------------------------------------------------------
@@ -428,20 +492,22 @@ def cerrar_corrida_workflow(
     return ejec
 
 
-def _procesar_con_reintento(s: Session, proc, intentos: int = 3) -> None:
+def _procesar_con_reintento(s: Session, ejec: Ejecucion, cfg: dict, usar_llm: bool, intentos: int = 3) -> "Procesador":
     """Procesa las crudas; si se cae la conexión con la BD (Neon cierra el SSL), reconecta y sigue.
 
     Cada bloque se confirma al terminar, así que un reintento retoma desde el bloque que se perdió.
     """
     from sqlalchemy.exc import OperationalError
+    from observatorio.pipeline.procesar import Procesador
 
+    proc = Procesador(s, ejec, cfg, usar_llm=usar_llm)
     for i in range(intentos):
         try:
             proc.procesar_pendientes()
-            return
+            return proc
         except OperationalError as e:
             try:
-                s.rollback()  # descarta la conexión rota; la siguiente consulta abre otra (pool_pre_ping)
+                s.rollback()
             except Exception:  # noqa: BLE001
                 pass
             if i == intentos - 1:
@@ -449,20 +515,20 @@ def _procesar_con_reintento(s: Session, proc, intentos: int = 3) -> None:
             log.warning("Se perdió la conexión con la base al procesar (intento %d/%d); se reintenta: %s",
                         i + 1, intentos, str(e).splitlines()[0][:200])
             time.sleep(5 * (i + 1))
+            asegurar_sesion_activa(s)
+            proc = Procesador(s, ejec, cfg, usar_llm=usar_llm)
+    return proc
 
 
 def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mini: bool = True) -> Ejecucion:
-    from observatorio.pipeline.procesar import Procesador
-
     cfg = leer_config(s)
     ejec = s.get(Ejecucion, id_ejecucion)
     if ejec is None:
         raise ValueError(f"No existe la ejecución {id_ejecucion}")
     ejec.fase = "procesando"
     commit_extraccion(s)
-    proc = Procesador(s, ejec, cfg, usar_llm=usar_llm)
     try:
-        _procesar_con_reintento(s, proc)
+        proc = _procesar_con_reintento(s, ejec, cfg, usar_llm=usar_llm)
 
         # Mini corrida automática si no se llegó a la meta
         mini_cfg = cfg.get("mini_corrida") or {}
@@ -494,7 +560,7 @@ def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mi
                     asegurar_sesion_activa(s)
             ejec.fase = "procesando"
             s.commit()
-            _procesar_con_reintento(s, proc)
+            proc = _procesar_con_reintento(s, ejec, cfg, usar_llm=usar_llm)
 
         proc.guardar_no_catalogados()
         finalizar(s, ejec, proc)
@@ -552,9 +618,9 @@ def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:
     ejec.conteo_por_fuente = por_fuente
     por_carrera: Counter = Counter()
     for o in guardadas:
-        for c in (o.carrera or "").split("; "):
-            if c:
-                por_carrera[c] += 1
+        cp = (o.carrera_principal or "").strip()
+        if cp:
+            por_carrera[cp] += 1
     ejec.conteo_por_carrera = dict(por_carrera)
     ejec.total_corte = total_corte(s, ejec.semestre, ejec.corte)
 
@@ -576,18 +642,37 @@ def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:
         pass  # parada esperada por objetivo de extracción
     elif ejec.total_corte < (ejec.meta_ofertas or 0) and ejec.modo == "completa" and crudas < objetivo:
         errores.append(f"El corte tiene {ejec.total_corte} ofertas relevantes; no alcanzó la meta de {ejec.meta_ofertas}.")
-    logro_fuentes = {NOMBRES_FUENTE.get(f, f): contar_crudas_fuente(s, ejec.id_ejecucion, f) for f in ordenar_fuentes(
-        [k for k in (ejec.parametros or {}).get("presupuesto_fuentes", {})]
-    )}
+    presu_f = (ejec.parametros or {}).get("presupuesto_fuentes") or {}
+    presu_fc = (ejec.parametros or {}).get("presupuesto_fuente_carrera") or {}
+    fuentes_ord = ordenar_fuentes([k for k in presu_f])
+    logro_fuentes = {NOMBRES_FUENTE.get(f, f): contar_crudas_fuente(s, ejec.id_ejecucion, f) for f in fuentes_ord}
     logro_carreras = {
         c: contar_crudas_carrera(s, ejec.id_ejecucion, c) for c in (ejec.parametros or {}).get("presupuesto_carreras", {})
     }
+    logro_fuente_carrera = {
+        NOMBRES_FUENTE.get(f, f): {
+            carrera: contar_crudas_fuente_carrera(s, ejec.id_ejecucion, f, carrera)
+            for carrera, _ in (presu_fc.get(f) or {}).items()
+        }
+        for f in fuentes_ord
+    }
+    errores_fc = []
+    for f in fuentes_ord:
+        nom = NOMBRES_FUENTE.get(f, f)
+        for carrera, meta in (presu_fc.get(f) or {}).items():
+            hecho = logro_fuente_carrera.get(nom, {}).get(carrera, 0)
+            if meta and hecho < int(meta):
+                errores_fc.append(f"{nom} · {carrera}: meta {meta} crudas, logrado {hecho}")
+    if errores_fc:
+        errores.append("Cupos fuente×carrera sin alcanzar: " + "; ".join(errores_fc[:12]))
     ejec.parametros = {
         **(ejec.parametros or {}),
         "logro_extraccion": {
             "objetivo": objetivo_ofertas_corrida(leer_config(s), ejec.parametros),
             "por_fuente": logro_fuentes,
             "por_carrera": logro_carreras,
+            "por_fuente_carrera": logro_fuente_carrera,
+            "presupuesto_fuente_carrera": presu_fc,
         },
     }
     ejec.errores_detalle = errores
@@ -635,8 +720,13 @@ def extraer_cursos_corrida(s: Session, id_ejecucion: str, terminos: list[str] | 
 # ---------------------------------------------------------------------------
 # Corrida completa en un solo proceso (CLI local y worker de servidor)
 # ---------------------------------------------------------------------------
-def extraer_secuencial(s: Session, id_ejecucion: str, max_minutos: float | None = None) -> list[dict]:
-    """Extrae fuente por fuente (LinkedIn primero), respetando el objetivo y cupos por fuente."""
+def extraer_secuencial(
+    s: Session,
+    id_ejecucion: str,
+    max_minutos: float | None = None,
+    fuentes_filtradas: list[str] | None = None,
+) -> list[dict]:
+    """Extracción local: fuente por fuente con reparto proporcional de tiempo (sin relleno entre fuentes)."""
     cfg = leer_config(s)
     ejec = s.get(Ejecucion, id_ejecucion)
     if ejec is None:
@@ -644,61 +734,19 @@ def extraer_secuencial(s: Session, id_ejecucion: str, max_minutos: float | None 
     fuentes = ordenar_fuentes(
         [f for (f,) in s.execute(select(Particion.fuente).where(Particion.id_ejecucion == id_ejecucion).distinct())]
     )
+    if fuentes_filtradas:
+        permitidas = {x.strip().lower() for x in fuentes_filtradas if x.strip()}
+        fuentes = [f for f in fuentes if f in permitidas]
     objetivo = objetivo_ofertas_corrida(cfg, ejec.parametros)
-    t0 = time.time()
+    presupuesto = (ejec.parametros or {}).get("presupuesto_fuentes") or {}
+    minutos_map = minutos_por_fuente(max_minutos, objetivo, presupuesto, fuentes)
     resumenes: list[dict] = []
     for f in fuentes:
         if objetivo and contar_crudas_ejecucion(s, id_ejecucion) >= objetivo:
             log.info("Objetivo de corrida alcanzado antes de %s", f)
             break
-        restante = None
-        if max_minutos is not None:
-            restante = max_minutos - (time.time() - t0) / 60
-            if restante <= 0:
-                log.info("Tiempo máximo agotado antes de %s", f)
-                break
-        n_frag = max(1, int(cfg["fuentes"].get(f, {}).get("fragmentos", 1)))
-        detenido = False
-        for frag in range(n_frag):
-            r = extraer(s, id_ejecucion, f, frag, n_frag, max_minutos=restante)
-            resumenes.append(r)
-            if r.get("tope_alcanzado") or r.get("cupo_fuente_alcanzado") or r.get("bloqueada"):
-                detenido = True
-                break
-        if detenido and (r.get("tope_alcanzado") or r.get("bloqueada")):
-            if r.get("tope_alcanzado"):
-                break
-            continue
-        if objetivo and contar_crudas_ejecucion(s, id_ejecucion) >= objetivo:
-            break
-
-    # Relleno: si no se llegó al objetivo, más consultas (términos/ciudades siguientes) para las carreras que faltan
-    if objetivo:
-        presupuesto_carreras = (ejec.parametros or {}).get("presupuesto_carreras") or {}
-        terminos = list(s.scalars(select(TerminoBusqueda).where(TerminoBusqueda.activo.is_(True), TerminoBusqueda.tipo == "principal")
-                                  .order_by(TerminoBusqueda.carrera, TerminoBusqueda.id)))
-        for ronda in range(1, RONDAS_RELLENO + 1):
-            if contar_crudas_ejecucion(s, id_ejecucion) >= objetivo:
-                break
-            if max_minutos is not None and max_minutos - (time.time() - t0) / 60 <= 1:
-                break
-            faltan = {c for c, cupo in presupuesto_carreras.items() if contar_crudas_carrera(s, id_ejecucion, c) < int(cupo)}
-            if not faltan:
-                break
-            nuevas = crear_particiones(s, ejec, fuentes, terminos, cfg["ubicaciones"], cfg, mini=False,
-                                       extra_por_carrera=CONSULTAS_RELLENO, carreras=faltan)
-            commit_extraccion(s)
-            log.info("Relleno %d: faltan %d crudas para el objetivo; %d consultas nuevas (%s)", ronda,
-                     objetivo - contar_crudas_ejecucion(s, id_ejecucion), nuevas, ", ".join(sorted(faltan)))
-            for f in fuentes:
-                if contar_crudas_ejecucion(s, id_ejecucion) >= objetivo:
-                    break
-                restante = None if max_minutos is None else max_minutos - (time.time() - t0) / 60
-                if restante is not None and restante <= 1:
-                    break
-                r = extraer(s, id_ejecucion, f, 0, 1, max_minutos=restante, relleno=True)
-                r["relleno"] = ronda
-                resumenes.append(r)
+        presupuesto_f = minutos_map.get(f, max_minutos)
+        resumenes.extend(extraer_fuente(s, id_ejecucion, f, max_minutos=presupuesto_f))
     return resumenes
 
 
