@@ -43,6 +43,8 @@ from observatorio.cupos_guardadas import (
     logro_guardadas,
     presupuestos_guardadas,
 )
+from observatorio.filtro_ofertas import oferta_incluida_en_resultados
+from observatorio.proporciones_finales import aplicar_tras_consolidar
 
 log = logging.getLogger("observatorio.corrida")
 
@@ -526,7 +528,28 @@ def _contar_sin_autoflush(s: Session, fn):
 # 3. Consolidar
 # ---------------------------------------------------------------------------
 def total_corte(s: Session, semestre: str, corte: str) -> int:
-    return s.scalar(select(func.count()).select_from(Oferta).where(Oferta.semestre == semestre, Oferta.corte == corte)) or 0
+    return (
+        s.scalar(
+            select(func.count()).select_from(Oferta).where(
+                Oferta.semestre == semestre,
+                Oferta.corte == corte,
+                oferta_incluida_en_resultados(),
+            )
+        )
+        or 0
+    )
+
+
+def ajustar_proporciones_corrida(s: Session, id_ejecucion: str) -> Ejecucion:
+    """Solo re-calcula el ajuste ±pp sobre ofertas ya guardadas (sin extracción ni reprocesar)."""
+    cfg = leer_config(s)
+    ejec = s.get(Ejecucion, id_ejecucion)
+    if ejec is None:
+        raise ValueError(f"No existe la ejecución {id_ejecucion}")
+    aplicar_tras_consolidar(s, ejec, cfg)
+    finalizar(s, ejec, proc=None)
+    s.commit()
+    return ejec
 
 
 def cerrar_corrida_workflow(
@@ -685,6 +708,7 @@ def consolidar(s: Session, id_ejecucion: str, permitir_mini: bool = True) -> Eje
                 proc = _procesar_con_reintento(s, ejec, cfg)
 
         proc.guardar_no_catalogados()
+        aplicar_tras_consolidar(s, ejec, cfg)
         finalizar(s, ejec, proc)
         s.commit()
         return ejec
@@ -736,7 +760,14 @@ def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:
         }
     # Duplicados = repetidas en el procesamiento + ya conocidas al extraer (no se pidió su detalle)
     ejec.duplicados_eliminados = (ejec.duplicados_proceso or 0) + omitidas
-    guardadas = list(s.scalars(select(Oferta).where(Oferta.id_ejecucion == ejec.id_ejecucion)))
+    guardadas = list(
+        s.scalars(
+            select(Oferta).where(
+                Oferta.id_ejecucion == ejec.id_ejecucion,
+                oferta_incluida_en_resultados(),
+            )
+        )
+    )
     ejec.ofertas_guardadas = len(guardadas)
     ejec.ofertas_relevantes = len(guardadas)
     por_fuente: dict[str, dict] = {}

@@ -62,6 +62,12 @@ POR_DEFECTO: dict[str, dict[str, Any]] = {
         "valor": 1.4,
         "descripcion": "Multiplicador del presupuesto de crudas vs. metas de ofertas guardadas (conversiones bajas).",
     },
+    "ajuste_proporcion_final": {
+        "valor": {"habilitado": True, "tolerancia_proporcion_pp": 5},
+        "descripcion": "Tras consolidar, omite ofertas sobre-representadas (sin borrar) hasta que las "
+                       "proporciones finales por fuente y carrera queden dentro de ±tolerancia_proporcion_pp "
+                       "respecto al presupuesto de guardadas.",
+    },
     "ronda_extra_cupos": {
         "valor": {
             "habilitada": True,

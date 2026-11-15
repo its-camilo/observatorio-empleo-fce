@@ -94,6 +94,8 @@ class Oferta(Base):
     id_fuente: Mapped[str | None] = mapped_column(String(120))
     clave_dedup: Mapped[str | None] = mapped_column(String(600), index=True)
     clasificado_por: Mapped[str | None] = mapped_column(String(30))
+    excluida_resultado_corrida: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    motivo_exclusion_corrida: Mapped[str | None] = mapped_column(String(64))
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=ahora)
     actualizado_en: Mapped[datetime] = mapped_column(DateTime, default=ahora, onupdate=ahora)
 

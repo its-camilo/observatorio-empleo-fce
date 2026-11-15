@@ -5,10 +5,13 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from observatorio.db.modelos import Catalogo, Curso, Oferta, OfertaSoftware
+from observatorio.filtro_ofertas import oferta_incluida_en_resultados
 
 
 def filtrar_ofertas(q, semestre=None, corte=None, carrera=None, fuente=None, ciudad=None, software=None, tipo_oferta=None,
-                    nivel=None, modalidad=None, texto=None):
+                    nivel=None, modalidad=None, texto=None, incluir_excluidas: bool = False):
+    if not incluir_excluidas:
+        q = q.where(oferta_incluida_en_resultados())
     if semestre:
         q = q.where(Oferta.semestre == semestre)
     if corte:
