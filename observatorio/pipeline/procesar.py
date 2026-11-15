@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from observatorio.db.crudas import (
     ERRORES_CONEXION_BD,
+    es_error_conexion_bd,
     esperar_backoff_reintento,
     liberar_conexion_para_espera,
     recuperar_sesion_db,
@@ -187,7 +188,7 @@ class Procesador:
                 recuperar_sesion_db(self.s)
                 raise
             except Exception as e:  # noqa: BLE001 — el LLM no debe tumbar la consolidación
-                if "Connection is closed" in str(e):
+                if es_error_conexion_bd(e):
                     recuperar_sesion_db(self.s)
                     raise
                 log.warning("Clasificación LLM interrumpida en bloque; se usan reglas de respaldo: %s", e)

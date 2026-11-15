@@ -5,7 +5,7 @@ import time
 
 from sqlalchemy import select
 from sqlalchemy.exc import DisconnectionError, IntegrityError, OperationalError
-from sqlalchemy.exc import ResourceClosedError
+from sqlalchemy.exc import PendingRollbackError, ResourceClosedError
 from sqlalchemy.orm import Session
 
 from observatorio.db.modelos import OfertaCruda
@@ -68,11 +68,13 @@ def asegurar_sesion_activa(s: Session) -> None:
             pass
 
 
-ERRORES_CONEXION_BD = (OperationalError, ResourceClosedError, DisconnectionError)
+ERRORES_CONEXION_BD = (OperationalError, ResourceClosedError, DisconnectionError, PendingRollbackError)
 
 
 def es_error_conexion_bd(exc: BaseException) -> bool:
     if isinstance(exc, ERRORES_CONEXION_BD):
+        return True
+    if "invalid transaction is rolled back" in str(exc).lower():
         return True
     causa = getattr(exc, "orig", None)
     return isinstance(causa, ERRORES_CONEXION_BD)
@@ -94,10 +96,11 @@ def recuperar_sesion_db(s: Session) -> None:
 
 
 def liberar_conexion_para_espera(s: Session) -> None:
-    """Confirma trabajo pendiente e invalida la conexión antes de esperas largas (p. ej. OpenRouter).
+    """Cierra la transacción y devuelve la conexión al pool antes de esperas largas (p. ej. OpenRouter).
 
-    No usar ``connection.close()``: deja la transacción desasociada y falla el siguiente ``flush()``.
-    En Postgres/Neon se invalida el socket para que el pool entregue otra conexión al volver a la BD.
+    En SQLAlchemy 2.x basta con ``commit()`` (o ``rollback()`` si falló): la conexión vuelve al pool y
+    no se mantiene SSL ocioso hacia Neon. No se llama a ``connection.invalidate()`` aquí: invalidar con
+    la sesión aún ligada a una transacción deja ``PendingRollbackError`` en la siguiente operación.
     """
     try:
         s.commit()
@@ -106,13 +109,6 @@ def liberar_conexion_para_espera(s: Session) -> None:
             s.rollback()
         except Exception:  # noqa: BLE001
             pass
-    url = str(s.get_bind().url)
-    if url.startswith("sqlite"):
-        return
-    try:
-        s.connection().invalidate()
-    except Exception:  # noqa: BLE001
-        pass
 
 
 def esperar_backoff_reintento(intento: int, base: float = 5.0) -> None:

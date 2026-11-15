@@ -61,19 +61,18 @@ def test_procesar_pendientes_reintenta_bloque_sin_duplicar(sesion, monkeypatch):
     assert commits["n"] >= 3
 
 
-def test_liberar_invalida_en_lugar_de_cerrar(monkeypatch):
+def test_liberar_solo_cierra_transaccion_sin_invalidar_socket(monkeypatch):
     from observatorio.db.crudas import liberar_conexion_para_espera
     from unittest.mock import MagicMock
 
-    cerrado = {"close": 0, "invalidate": 0}
+    llamadas = {"commit": 0, "rollback": 0, "invalidate": 0}
     conn = MagicMock()
-    conn.close = lambda: cerrado.__setitem__("close", cerrado["close"] + 1)
-    conn.invalidate = lambda: cerrado.__setitem__("invalidate", cerrado["invalidate"] + 1)
+    conn.invalidate = lambda: llamadas.__setitem__("invalidate", llamadas["invalidate"] + 1)
     s = MagicMock()
     s.get_bind.return_value.url = "postgresql://user@host/db"
-    s.commit = MagicMock()
+    s.commit = lambda: llamadas.__setitem__("commit", llamadas["commit"] + 1)
     s.connection.return_value = conn
 
     liberar_conexion_para_espera(s)
-    assert cerrado["invalidate"] == 1
-    assert cerrado["close"] == 0
+    assert llamadas["commit"] == 1
+    assert llamadas["invalidate"] == 0
