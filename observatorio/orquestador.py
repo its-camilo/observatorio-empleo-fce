@@ -35,6 +35,14 @@ from observatorio.scraper.base import Consulta
 from observatorio.scraper.http import FuenteBloqueada, explicar_error
 
 from observatorio.normas_corrida import NOMBRES_FUENTE, normalizar_corte, normalizar_semestre
+from observatorio.cupos_guardadas import (
+    ajustar_factor_extraccion,
+    construir_presupuestos_preparar,
+    deficits_guardadas,
+    estimar_rendimiento_fc,
+    logro_guardadas,
+    presupuestos_guardadas,
+)
 
 log = logging.getLogger("observatorio.corrida")
 
@@ -182,17 +190,23 @@ def preparar(
                  id_ejecucion, n_particiones)
     else:
         objetivo = objetivo_ofertas_corrida(cfg, params)
-        ejec.meta_ofertas = objetivo
         activas = fuentes_para_corrida(cfg, fuentes)
-        presupuesto = presupuesto_por_fuente(objetivo, activas, cfg) if objetivo > 0 else {}
-        presupuesto_carreras = presupuesto_por_carrera(objetivo, cfg) if objetivo > 0 else {}
-        ejec.parametros = {
-            **params,
-            "objetivo_ofertas_corrida": objetivo,
-            "presupuesto_fuentes": presupuesto,
-            "presupuesto_carreras": presupuesto_carreras,
-            "presupuesto_fuente_carrera": presupuesto_fuente_carrera(presupuesto, cfg),
-        }
+        meta_guardadas = max(0, int(cfg.get("meta_ofertas") or objetivo or 0))
+        if meta_guardadas <= 0:
+            meta_guardadas = objetivo
+        ejec.meta_ofertas = meta_guardadas
+        if meta_guardadas > 0 and activas:
+            ejec.parametros = {**params, **construir_presupuestos_preparar(cfg, meta_guardadas, activas)}
+        else:
+            presupuesto = presupuesto_por_fuente(objetivo, activas, cfg) if objetivo > 0 else {}
+            presupuesto_carreras = presupuesto_por_carrera(objetivo, cfg) if objetivo > 0 else {}
+            ejec.parametros = {
+                **params,
+                "objetivo_ofertas_corrida": objetivo,
+                "presupuesto_fuentes": presupuesto,
+                "presupuesto_carreras": presupuesto_carreras,
+                "presupuesto_fuente_carrera": presupuesto_fuente_carrera(presupuesto, cfg),
+            }
         ejec.fuentes = ", ".join(NOMBRES_FUENTE[f] for f in activas)
         terminos = list(s.scalars(select(TerminoBusqueda).where(TerminoBusqueda.activo.is_(True), TerminoBusqueda.tipo == "principal")
                                   .order_by(TerminoBusqueda.carrera, TerminoBusqueda.id)))
@@ -219,7 +233,7 @@ MIN_CONSULTAS_CARRERA = 4  # mínimo de consultas por fuente y carrera
 
 def crear_particiones(s: Session, ejec: Ejecucion, fuentes: list[str], terminos, ubicaciones: list[dict], cfg: dict,
                       mini: bool, max_por_particion: int | None = None, extra_por_carrera: int | None = None,
-                      carreras: set[str] | None = None) -> int:
+                      carreras: set[str] | None = None, ronda_cupo_extra: bool = False) -> int:
     """Crea las consultas (término × ciudad) por fuente.
 
     Las consultas se reparten entre carreras según el cupo fuente×carrera y se intercalan
@@ -239,7 +253,7 @@ def crear_particiones(s: Session, ejec: Ejecucion, fuentes: list[str], terminos,
     for f in fuentes_orden:
         max_part_f = int(max_por_particion or cfg["fuentes"].get(f, {}).get("max_por_particion", 100))
         cupo = presupuesto.get(f)
-        con_tope = not mini and not extra_por_carrera and cupo is not None and int(cupo) > 0
+        con_tope = not mini and not extra_por_carrera and not ronda_cupo_extra and cupo is not None and int(cupo) > 0
         factor = max(1, int(cfg.get("factor_consultas", FACTOR_CONSULTAS)))
         colas: dict[str, list] = {}
         for carrera, ts in por_carrera.items():
@@ -565,6 +579,64 @@ def _procesar_con_reintento(s: Session, ejec: Ejecucion, cfg: dict, intentos: in
     return proc
 
 
+def _ronda_extra_cupos_guardadas(s: Session, ejec: Ejecucion, cfg: dict) -> bool:
+    """Extracción adicional enfocada en celdas fuente×carrera con guardadas bajo meta."""
+    extra_cfg = cfg.get("ronda_extra_cupos") or {}
+    if not extra_cfg.get("habilitada", True) or ejec.modo != "completa":
+        return False
+    params = ejec.parametros or {}
+    _, _, presu_guardadas_fc = presupuestos_guardadas(params, cfg)
+    faltan = deficits_guardadas(s, ejec.id_ejecucion, presu_guardadas_fc)
+    if not faltan:
+        return False
+    rondas_hechas = int(params.get("rondas_extra_cupos", 0))
+    max_rondas = int(extra_cfg.get("max_rondas", 2))
+    if rondas_hechas >= max_rondas:
+        return False
+    consultas = int(extra_cfg.get("consultas_por_celda", 8))
+    max_min = float(extra_cfg.get("max_minutos_fuente", 60))
+    por_fuente: dict[str, set[str]] = {}
+    for fuente, carrera, _meta, _hecho in faltan:
+        por_fuente.setdefault(fuente, set()).add(carrera)
+    fuentes = ordenar_fuentes(list(por_fuente))
+    terminos = list(
+        s.scalars(select(TerminoBusqueda).where(TerminoBusqueda.activo.is_(True), TerminoBusqueda.tipo == "principal"))
+    )
+    n_part = crear_particiones(
+        s,
+        ejec,
+        fuentes,
+        terminos,
+        cfg["ubicaciones"],
+        cfg,
+        mini=False,
+        extra_por_carrera=consultas,
+        carreras=set().union(*por_fuente.values()),
+        ronda_cupo_extra=True,
+    )
+    if n_part <= 0:
+        return False
+    log.info(
+        "Ronda extra cupos (%d/%d): %d consultas nuevas para %d celdas con déficit de guardadas",
+        rondas_hechas + 1,
+        max_rondas,
+        n_part,
+        len(faltan),
+    )
+    ejec.fase = "extra_cupos"
+    ejec.parametros = {**params, "rondas_extra_cupos": rondas_hechas + 1}
+    s.commit()
+    for f in fuentes:
+        try:
+            extraer(s, ejec.id_ejecucion, f, max_minutos=max_min)
+        except Exception as e:  # noqa: BLE001
+            log.warning("Ronda extra cupos en %s falló: %s", f, e)
+            asegurar_sesion_activa(s)
+    ejec.fase = "procesando"
+    s.commit()
+    return True
+
+
 def consolidar(s: Session, id_ejecucion: str, permitir_mini: bool = True) -> Ejecucion:
     cfg = leer_config(s)
     ejec = s.get(Ejecucion, id_ejecucion)
@@ -606,6 +678,11 @@ def consolidar(s: Session, id_ejecucion: str, permitir_mini: bool = True) -> Eje
             ejec.fase = "procesando"
             s.commit()
             proc = _procesar_con_reintento(s, ejec, cfg)
+
+        extra_cfg = cfg.get("ronda_extra_cupos") or {}
+        if extra_cfg.get("habilitada", True):
+            while _ronda_extra_cupos_guardadas(s, ejec, cfg):
+                proc = _procesar_con_reintento(s, ejec, cfg)
 
         proc.guardar_no_catalogados()
         finalizar(s, ejec, proc)
@@ -655,6 +732,7 @@ def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:
             **previo,
             "modo": "reglas_deterministas",
             "dudosas_respaldo": previo.get("dudosas_respaldo", 0) + t.por_respaldo,
+            "excedente_cupo": previo.get("excedente_cupo", 0) + t.excedente_cupo,
         }
     # Duplicados = repetidas en el procesamiento + ya conocidas al extraer (no se pidió su detalle)
     ejec.duplicados_eliminados = (ejec.duplicados_proceso or 0) + omitidas
@@ -723,15 +801,36 @@ def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:
             if meta and hecho < int(meta):
                 errores_fc.append(f"{nom} · {carrera}: meta {meta} crudas, logrado {hecho}")
     if errores_fc:
-        errores.append("Cupos fuente×carrera sin alcanzar: " + "; ".join(errores_fc[:12]))
+        errores.append("Cupos de extracción (crudas) fuente×carrera sin alcanzar: " + "; ".join(errores_fc[:12]))
+    _, _, presu_guardadas_fc = presupuestos_guardadas(ejec.parametros or {}, leer_config(s))
+    logro_g_fc = logro_guardadas(s, ejec.id_ejecucion, presu_guardadas_fc)
+    errores_guardadas: list[str] = []
+    for f in fuentes_ord:
+        nom = NOMBRES_FUENTE.get(f, f)
+        for carrera, meta in (presu_guardadas_fc.get(f) or {}).items():
+            hecho = logro_g_fc.get(nom, {}).get(carrera, 0)
+            meta_i = int(meta or 0)
+            if meta_i > 0 and hecho < meta_i:
+                errores_guardadas.append(f"{nom} · {carrera}: meta {meta_i} guardadas, logrado {hecho}")
+    if errores_guardadas:
+        errores.append("Cupos finales (guardadas) fuente×carrera sin alcanzar: " + "; ".join(errores_guardadas[:20]))
+    rendimiento = estimar_rendimiento_fc(s, ejec.id_ejecucion, presu_guardadas_fc)
+    factor = float((ejec.parametros or {}).get("factor_extraccion_crudas", 1.4))
+    factor_nuevo = ajustar_factor_extraccion(rendimiento, factor, presu_guardadas_fc, logro_g_fc)
     ejec.parametros = {
         **(ejec.parametros or {}),
+        "factor_extraccion_crudas": factor_nuevo,
+        "rendimiento_guardadas_fc": rendimiento,
         "logro_extraccion": {
             "objetivo": objetivo_ofertas_corrida(leer_config(s), ejec.parametros),
             "por_fuente": logro_fuentes,
             "por_carrera": logro_carreras,
             "por_fuente_carrera": logro_fuente_carrera,
             "presupuesto_fuente_carrera": presu_fc,
+        },
+        "logro_guardadas": {
+            "por_fuente_carrera": logro_g_fc,
+            "presupuesto_fuente_carrera": presu_guardadas_fc,
         },
     }
     ejec.errores_detalle = errores

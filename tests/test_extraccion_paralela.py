@@ -45,10 +45,10 @@ def test_matriz_filtra_fuentes_para_reanudar(sesion):
 def test_presupuesto_carreras_respeta_config(sesion):
     cfg = orq.leer_config(sesion)
     ejec = orq.preparar(sesion, "2026-II", "mitad", modo="completa")
-    ejec.parametros = {**(ejec.parametros or {}), "objetivo_ofertas_corrida": 3000}
+    ejec.parametros = {**(ejec.parametros or {}), "objetivo_ofertas_corrida": 3000, "meta_ofertas_guardadas": 3000}
     sesion.query(Particion).filter(Particion.id_ejecucion == ejec.id_ejecucion).delete()
     ejec = orq.preparar(sesion, "2026-II", "mitad", id_ejecucion=ejec.id_ejecucion, modo="completa")
-    presu = ejec.parametros["presupuesto_carreras"]
+    presu = ejec.parametros.get("presupuesto_guardadas_carreras") or ejec.parametros["presupuesto_carreras"]
     raw = cfg.get("distribucion_carreras") or {}
     total = sum(presu.values())
     assert total == 3000

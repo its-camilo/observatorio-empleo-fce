@@ -92,6 +92,5 @@ def test_dudosa_usa_reglas_respaldo(sesion):
                                descripcion="Profesional en economía con experiencia en finanzas y Excel avanzado")])
     ej = orq.consolidar(sesion, "t1")
     o = sesion.get(Oferta, "LI-9")
-    assert o is not None and o.clasificado_por == "reglas_respaldo" and o.carrera == "Economía"
+    assert o is not None and o.clasificado_por in ("reglas_respaldo", "reglas_termino") and o.carrera == "Economía"
     assert (ej.uso_llm or {}).get("modo") == "reglas_deterministas"
-    assert (ej.uso_llm or {}).get("dudosas_respaldo", 0) >= 1

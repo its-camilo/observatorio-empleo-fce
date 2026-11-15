@@ -126,7 +126,8 @@ class ClasificadorReglas:
             n_exp = sum(1 for p in self.explicitas.get(c, []) if p.search(d))
             n_desc = sum(1 for w in r.get("descripcion", []) if _contiene(d, w))
             fuertes[c] = n_tit
-            puntos[c] = 3 * n_tit + 2 * n_exp + min(n_desc, 3) + (1 if carrera_termino == c else 0)
+            bonus_termino = 3 if carrera_termino == c else 0
+            puntos[c] = 3 * n_tit + 2 * n_exp + min(n_desc, 3) + bonus_termino
         self._especificas = especificas
         return fuertes, puntos
 
@@ -147,14 +148,37 @@ class ClasificadorReglas:
             otras = [c for c in orden[1:] if fuertes[c] > 0 or puntos[c] >= 3]
             return Clasificacion("relevante", ([principal] + otras)[:MAX_CARRERAS], puntos, "título")
         if not orden:
+            if carrera_termino and puntos.get(carrera_termino, 0) >= 2:
+                return Clasificacion(
+                    "relevante",
+                    [carrera_termino],
+                    puntos,
+                    "término de búsqueda",
+                    "reglas_termino",
+                )
             return Clasificacion("no_relevante", [], puntos, "sin señales de carrera")
+        if carrera_termino and carrera_termino in orden and puntos.get(carrera_termino, 0) >= 2:
+            otras = [x for x in orden if x != carrera_termino and puntos.get(x, 0) >= 3]
+            return Clasificacion(
+                "relevante",
+                ([carrera_termino] + otras)[:MAX_CARRERAS],
+                puntos,
+                "término de búsqueda (ambiguo)",
+                "reglas_termino",
+            )
         return Clasificacion("dudosa", orden[:MAX_CARRERAS], puntos, "solo descripción o término")
 
     @staticmethod
-    def respaldo(c: Clasificacion) -> Clasificacion:
-        """Regla de respaldo para ofertas dudosas: puntaje ≥ 3 por carrera."""
-        aceptadas = [k for k in c.carreras if c.puntajes.get(k, 0) >= 3]
+    def respaldo(c: Clasificacion, carrera_termino: str | None = None) -> Clasificacion:
+        """Regla de respaldo para ofertas dudosas: puntaje ≥ 3 (≥ 2 si coincide el término de búsqueda)."""
+        aceptadas: list[str] = []
+        for k in c.carreras:
+            umbral = 2 if carrera_termino and k == carrera_termino else 3
+            if c.puntajes.get(k, 0) >= umbral:
+                aceptadas.append(k)
         if aceptadas:
-            return Clasificacion("relevante", aceptadas[:MAX_CARRERAS], c.puntajes, "respaldo por reglas", "reglas_respaldo")
+            principal = carrera_termino if carrera_termino in aceptadas else aceptadas[0]
+            orden = [principal] + [x for x in aceptadas if x != principal]
+            return Clasificacion("relevante", orden[:MAX_CARRERAS], c.puntajes, "respaldo por reglas", "reglas_respaldo")
         return Clasificacion("no_relevante", [], c.puntajes, "respaldo por reglas: evidencia insuficiente", "reglas_respaldo")
 

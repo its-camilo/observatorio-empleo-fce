@@ -26,6 +26,7 @@ from observatorio.pipeline.no_catalogados import contar_no_catalogados
 from observatorio.pipeline.software import DetectorSoftware
 from observatorio.pipeline.valor_formativo import oferta_tiene_valor_formativo, tiene_descripcion_util
 from observatorio.capitales import es_capital_departamental
+from observatorio.cupos_guardadas import ControlCuposGuardadas, presupuestos_guardadas
 from observatorio.texto import es_colombia, normalizar_clave
 
 log = logging.getLogger("observatorio.procesar")
@@ -46,13 +47,14 @@ class ResultadoProceso:
     no_relevantes: int = 0
     guardadas: int = 0
     por_respaldo: int = 0
+    excedente_cupo: int = 0
     no_catalogados: Counter = field(default_factory=Counter)
     originales_nc: dict = field(default_factory=dict)
     ejemplo_nc: dict = field(default_factory=dict)
 
     def sumar(self, otro: "ResultadoProceso") -> None:
         for k in ("crudas", "fuera_de_colombia", "fuera_de_capital", "fuera_de_ventana", "filtradas_tipo", "duplicados",
-                  "actualizadas", "no_relevantes", "guardadas", "por_respaldo"):
+                  "actualizadas", "no_relevantes", "guardadas", "por_respaldo", "excedente_cupo"):
             setattr(self, k, getattr(self, k) + getattr(otro, k))
 
 
@@ -76,6 +78,9 @@ class Procesador:
         self.requiere_formativo = bool(cfg.get("requiere_software_o_habilidad", True))
         self.solo_capitales = bool(cfg.get("solo_capitales_departamento", True))
         self.total = ResultadoProceso()
+        params = ejec.parametros or {}
+        pf, pc, pfc = presupuestos_guardadas(params, cfg)
+        self.cupos = ControlCuposGuardadas(s, ejec.id_ejecucion, pf, pc, pfc)
 
     # ------------------------------------------------------------------
     def _existentes(self, claves: set[str], ids: set[str]) -> tuple[dict[str, list[Oferta]], dict[str, Oferta]]:
@@ -166,7 +171,7 @@ class Procesador:
         for u in nuevas:
             c = self.clasificador.clasificar(u["cargo"], u["descripcion"], u.get("carrera_termino"))
             if c.estado == "dudosa":
-                c = ClasificadorReglas.respaldo(c)
+                c = ClasificadorReglas.respaldo(c, u.get("carrera_termino"))
                 r.por_respaldo += 1
             clasif[u["id_oferta"]] = c
 
@@ -187,6 +192,13 @@ class Procesador:
                 if not ok:
                     r.no_relevantes += 1
                     continue
+            principal = c.carreras[0]
+            ok_cupo, motivo_cupo = self.cupos.puede_guardar(u["fuente"], principal)
+            if not ok_cupo:
+                r.excedente_cupo += 1
+                r.no_relevantes += 1
+                log.debug("Oferta %s no guardada: %s", u["id_oferta"], motivo_cupo)
+                continue
             o = Oferta(
                 id_oferta=u["id_oferta"], fuente=u["fuente"], url=u["url"], fecha_publicacion=u["fecha_publicacion"],
                 fecha_extraccion=u["fecha_extraccion"], semestre=u["semestre"], corte=u["corte"], cargo=u["cargo"],
@@ -198,6 +210,7 @@ class Procesador:
             )
             self._aplicar_software(o)
             self.s.add(o)
+            self.cupos.registrar(u["fuente"], principal)
             r.guardadas += 1
             guardadas_dicts.append({"id_oferta": o.id_oferta, "descripcion": o.descripcion, "empresa": o.empresa})
 

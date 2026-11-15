@@ -32,8 +32,9 @@ def test_consultas_intercaladas_por_carrera(sesion):
 
 def test_presupuesto_fuente_carrera_guardado(sesion):
     _, ejec = _preparar(sesion)
-    fc = ejec.parametros["presupuesto_fuente_carrera"]
-    for f, cupo in ejec.parametros["presupuesto_fuentes"].items():
+    fc = ejec.parametros.get("presupuesto_guardadas_fuente_carrera") or ejec.parametros["presupuesto_fuente_carrera"]
+    pf = ejec.parametros.get("presupuesto_guardadas_fuentes") or ejec.parametros["presupuesto_fuentes"]
+    for f, cupo in pf.items():
         assert sum(fc[f].values()) == cupo
 
 
