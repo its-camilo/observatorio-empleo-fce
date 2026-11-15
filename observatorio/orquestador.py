@@ -533,7 +533,7 @@ def cerrar_corrida_workflow(
     return ejec
 
 
-def _procesar_con_reintento(s: Session, ejec: Ejecucion, cfg: dict, usar_llm: bool, intentos: int = 3) -> "Procesador":
+def _procesar_con_reintento(s: Session, ejec: Ejecucion, cfg: dict, intentos: int = 3) -> "Procesador":
     """Procesa las crudas; si se cae la conexión con la BD (Neon cierra el SSL), reconecta y sigue.
 
     Cada bloque se confirma al terminar, así que un reintento retoma desde el bloque que se perdió.
@@ -541,7 +541,7 @@ def _procesar_con_reintento(s: Session, ejec: Ejecucion, cfg: dict, usar_llm: bo
     from observatorio.db.crudas import ERRORES_CONEXION_BD, esperar_backoff_reintento, recuperar_sesion_db
     from observatorio.pipeline.procesar import Procesador
 
-    proc = Procesador(s, ejec, cfg, usar_llm=usar_llm)
+    proc = Procesador(s, ejec, cfg)
     for i in range(intentos):
         try:
             proc.procesar_pendientes()
@@ -561,11 +561,11 @@ def _procesar_con_reintento(s: Session, ejec: Ejecucion, cfg: dict, usar_llm: bo
                 str(e).splitlines()[0][:200],
             )
             esperar_backoff_reintento(i)
-            proc = Procesador(s, ejec, cfg, usar_llm=usar_llm)
+            proc = Procesador(s, ejec, cfg)
     return proc
 
 
-def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mini: bool = True) -> Ejecucion:
+def consolidar(s: Session, id_ejecucion: str, permitir_mini: bool = True) -> Ejecucion:
     cfg = leer_config(s)
     ejec = s.get(Ejecucion, id_ejecucion)
     if ejec is None:
@@ -573,7 +573,7 @@ def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mi
     ejec.fase = "procesando"
     commit_extraccion(s)
     try:
-        proc = _procesar_con_reintento(s, ejec, cfg, usar_llm=usar_llm)
+        proc = _procesar_con_reintento(s, ejec, cfg)
 
         # Mini corrida automática si no se llegó a la meta
         mini_cfg = cfg.get("mini_corrida") or {}
@@ -605,7 +605,7 @@ def consolidar(s: Session, id_ejecucion: str, usar_llm: bool = True, permitir_mi
                     asegurar_sesion_activa(s)
             ejec.fase = "procesando"
             s.commit()
-            proc = _procesar_con_reintento(s, ejec, cfg, usar_llm=usar_llm)
+            proc = _procesar_con_reintento(s, ejec, cfg)
 
         proc.guardar_no_catalogados()
         finalizar(s, ejec, proc)
@@ -651,9 +651,11 @@ def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:
         ejec.duplicados_proceso = (ejec.duplicados_proceso or 0) + t.duplicados
         ejec.no_relevantes = (ejec.no_relevantes or 0) + t.no_relevantes
         previo = ejec.uso_llm or {}
-        ejec.uso_llm = {**previo, **proc.llm.resumen(),
-                        "clasificadas_llm": previo.get("clasificadas_llm", 0) + t.por_llm,
-                        "respaldo_reglas": previo.get("respaldo_reglas", 0) + t.por_respaldo}
+        ejec.uso_llm = {
+            **previo,
+            "modo": "reglas_deterministas",
+            "dudosas_respaldo": previo.get("dudosas_respaldo", 0) + t.por_respaldo,
+        }
     # Duplicados = repetidas en el procesamiento + ya conocidas al extraer (no se pidió su detalle)
     ejec.duplicados_eliminados = (ejec.duplicados_proceso or 0) + omitidas
     guardadas = list(s.scalars(select(Oferta).where(Oferta.id_ejecucion == ejec.id_ejecucion)))
@@ -811,7 +813,7 @@ def extraer_secuencial(
 
 def correr_completa(s: Session, semestre: str, corte: str, id_ejecucion: str | None = None, ejecutado_por: str | None = None,
                     modo: str = "completa", fuentes: list[str] | None = None, limite_terminos: int | None = None,
-                    limite_ubicaciones: int | None = None, max_por_particion: int | None = None, usar_llm: bool = True,
+                    limite_ubicaciones: int | None = None, max_por_particion: int | None = None,
                     cursos: bool = True, ejecutor: str = "local", paralelo: bool = True) -> Ejecucion:
     """Prepara, extrae todas las fuentes (LinkedIn primero; hebras solo entre fragmentos de una fuente) y consolida."""
     from observatorio.db.sesion import fabrica_sesiones
@@ -873,4 +875,4 @@ def correr_completa(s: Session, semestre: str, corte: str, id_ejecucion: str | N
             extraer_cursos_corrida(s, idx, terminos=terminos, max_por_termino=max_por_particion)
         except Exception as e:  # noqa: BLE001
             log.warning("Cursos falló: %s", e)
-    return consolidar(s, idx, usar_llm=usar_llm, permitir_mini=(modo == "completa"))
+    return consolidar(s, idx, permitir_mini=(modo == "completa"))

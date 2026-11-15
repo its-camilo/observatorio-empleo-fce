@@ -29,7 +29,7 @@ def test_corrida_sintetica(sesion):
     e = orq.preparar(sesion, "2026-II", "inicio", "t1", fuentes=["linkedin"], limite_terminos=1, limite_ubicaciones=1, modo="prueba")
     sesion.commit()
     crudas(sesion, "t1", BASE)
-    e = orq.consolidar(sesion, "t1", usar_llm=False)
+    e = orq.consolidar(sesion, "t1")
     ids = {o.id_oferta for o in sesion.query(Oferta)}
     assert ids == {"IN-a", "CT-c1"}  # duplicado fusionado, mesero descartado, Perú fuera
     assert e.duplicados_eliminados >= 1 and e.no_relevantes == 1
@@ -45,15 +45,15 @@ def test_dedup_entre_ejecuciones_y_reanudacion(sesion):
     orq.preparar(sesion, "2026-II", "inicio", "t1", fuentes=["linkedin"], limite_terminos=1, limite_ubicaciones=1, modo="prueba")
     sesion.commit()
     crudas(sesion, "t1", BASE[:1])
-    orq.consolidar(sesion, "t1", usar_llm=False)
+    orq.consolidar(sesion, "t1")
     # reanudar la misma ejecución no duplica
-    orq.consolidar(sesion, "t1", usar_llm=False)
+    orq.consolidar(sesion, "t1")
     assert sesion.query(Oferta).count() == 1
     # otra ejecución encuentra la misma oferta en otra fuente con descripción más larga: se actualiza, no se duplica
     orq.preparar(sesion, "2026-II", "mitad", "t2", fuentes=["linkedin"], limite_terminos=1, limite_ubicaciones=1, modo="prueba")
     sesion.commit()
     crudas(sesion, "t2", [BASE[1]])
-    e2 = orq.consolidar(sesion, "t2", usar_llm=False)
+    e2 = orq.consolidar(sesion, "t2")
     assert sesion.query(Oferta).count() == 1
     assert e2.duplicados_eliminados == 1
     assert "más larga" in sesion.query(Oferta).one().descripcion
@@ -64,7 +64,7 @@ def test_comparacion_entre_cortes(sesion):
         orq.preparar(sesion, "2026-II", corte, idx, fuentes=["linkedin"], limite_terminos=1, limite_ubicaciones=1, modo="prueba")
         sesion.commit()
         crudas(sesion, idx, lista)
-        orq.consolidar(sesion, idx, usar_llm=False)
+        orq.consolidar(sesion, idx)
     c = analisis.comparar(sesion, "2026-II", "Inicio", "2026-II", "Mitad")
     estados = {x["software"]: x["estado"] for x in c["softwares"]}
     assert estados["Siigo Nube"] == "desapareció" and estados["Python"] == "nuevo"
@@ -78,29 +78,20 @@ def test_exportar_excel(sesion):
     orq.preparar(sesion, "2026-II", "inicio", "t1", fuentes=["linkedin"], limite_terminos=1, limite_ubicaciones=1, modo="prueba")
     sesion.commit()
     crudas(sesion, "t1", BASE)
-    orq.consolidar(sesion, "t1", usar_llm=False)
+    orq.consolidar(sesion, "t1")
     wb = load_workbook(io.BytesIO(a_excel(sesion, "2026-II", "Inicio")))
     assert {"Ofertas", "Oferta_Software", "Catalogo", "Ejecuciones", "Ranking", "Cursos"} <= set(wb.sheetnames)
     assert [c.value for c in wb["Ofertas"][1]][:4] == ["id_oferta", "fuente", "url", "fecha_publicacion"]
 
 
-def test_llm_simulado_para_dudosas(sesion, monkeypatch):
-    from observatorio.pipeline import llm as modulo
-
-    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-prueba")
-
-    def falso(self, mensajes):
-        import json
-        ofertas = json.loads(mensajes[1]["content"])["ofertas"]
-        return {"resultados": [{"id": o["id"], "relevante": True, "carreras": ["Economía"], "herramientas_no_catalogadas": ["EViews"]}
-                               for o in ofertas]}, "modelo-prueba:free"
-
-    monkeypatch.setattr(modulo.ClienteLLM, "_llamar", falso)
+def test_dudosa_usa_reglas_respaldo(sesion):
     orq.preparar(sesion, "2026-II", "inicio", "t1", fuentes=["linkedin"], limite_terminos=1, limite_ubicaciones=1, modo="prueba")
     sesion.commit()
     crudas(sesion, "t1", [dict(fuente="LinkedIn", id_fuente="9", url="u", cargo="Consultor Senior", empresa="Firma",
-                               ubicacion="Bogotá", fecha_publicacion="2026-11-01",
-                               descripcion="Profesional en economía con experiencia en finanzas y EViews")])
-    orq.consolidar(sesion, "t1", usar_llm=True)
+                               ubicacion="Bogotá", fecha_publicacion="2026-11-01", carrera="Economía",
+                               descripcion="Profesional en economía con experiencia en finanzas y Excel avanzado")])
+    ej = orq.consolidar(sesion, "t1")
     o = sesion.get(Oferta, "LI-9")
-    assert o is not None and o.clasificado_por == "llm" and o.carrera == "Economía"
+    assert o is not None and o.clasificado_por == "reglas_respaldo" and o.carrera == "Economía"
+    assert (ej.uso_llm or {}).get("modo") == "reglas_deterministas"
+    assert (ej.uso_llm or {}).get("dudosas_respaldo", 0) >= 1

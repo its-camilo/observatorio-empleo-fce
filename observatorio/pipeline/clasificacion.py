@@ -3,8 +3,7 @@
 Resultado por oferta:
 - `relevante`  -> se guarda con sus carreras (máximo 5, la principal primero).
 - `no_relevante` -> se descarta (no se guarda en `ofertas`).
-- `dudosa`     -> se envía al LLM (OpenRouter, modelos gratuitos). Si el LLM no
-  está disponible se aplica la regla de respaldo.
+- `dudosa`     -> se resuelve con la regla de respaldo (puntaje ≥ 3 por carrera).
 
 Puntaje por carrera = 3 × (palabras fuertes en el título)
                     + 2 × (carrera mencionada explícitamente en la descripción)
@@ -153,7 +152,7 @@ class ClasificadorReglas:
 
     @staticmethod
     def respaldo(c: Clasificacion) -> Clasificacion:
-        """Regla de respaldo para dudosas cuando no hay LLM: puntaje ≥ 3."""
+        """Regla de respaldo para ofertas dudosas: puntaje ≥ 3 por carrera."""
         aceptadas = [k for k in c.carreras if c.puntajes.get(k, 0) >= 3]
         if aceptadas:
             return Clasificacion("relevante", aceptadas[:MAX_CARRERAS], c.puntajes, "respaldo por reglas", "reglas_respaldo")

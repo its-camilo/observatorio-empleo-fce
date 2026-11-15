@@ -87,7 +87,7 @@ def imprimir_reporte(e) -> None:
         for c, meta in sorted(presu_c.items()):
             print(f"  · {c}: meta {meta}, logrado {por_c.get(c, 0)}")
     if e.uso_llm:
-        print("Clasificación con IA:", json.dumps(e.uso_llm, ensure_ascii=False))
+        print("Resumen clasificación:", json.dumps(e.uso_llm, ensure_ascii=False))
     m, sg = divmod(e.duracion_segundos or 0, 60)
     print(f"Duración: {m // 60} h {m % 60} min {sg} s")
     if e.errores_detalle:
@@ -114,7 +114,6 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--terminos", type=int, help="Máximo de términos (prueba)")
     p.add_argument("--ubicaciones", type=int, help="Máximo de ciudades (prueba)")
     p.add_argument("--max", type=int, dest="max_por_particion", help="Máximo de ofertas por término y ciudad")
-    p.add_argument("--sin-llm", action="store_true")
     p.add_argument("--sin-mini", action="store_true", help="No lanzar mini corrida al consolidar")
     p.add_argument("--solo-consolidar", action="store_true", help="Solo re-procesar crudas existentes (sin nueva extracción)")
     p.add_argument("--sin-cursos", action="store_true")
@@ -160,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
             p.error("Indique --semestre (p. ej. 2026-II) y --corte (inicio, mitad o final)")
         if a.accion == "completa":
             e = orq.correr_completa(s, a.semestre, a.corte, a.run_id, a.ejecutado_por, a.modo, fuentes, a.terminos, a.ubicaciones,
-                                    a.max_por_particion, usar_llm=not a.sin_llm, cursos=not a.sin_cursos, ejecutor="local")
+                                    a.max_por_particion, cursos=not a.sin_cursos, ejecutor="local")
             imprimir_reporte(e)
             if os.getenv("GITHUB_ACTIONS") and e.estado != "completada":
                 # Que GitHub Actions muestre lo mismo que el front (aviso amarillo en el resumen del run)
@@ -225,7 +224,6 @@ def main(argv: list[str] | None = None) -> int:
                 e = orq.consolidar(
                     s,
                     a.run_id,
-                    usar_llm=not a.sin_llm,
                     permitir_mini=not a.sin_mini,
                 )
             except Exception:

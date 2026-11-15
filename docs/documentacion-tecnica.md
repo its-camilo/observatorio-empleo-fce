@@ -33,7 +33,7 @@ cómo agregar una fuente, qué hacer cuando una página cambia, los riesgos (en 
    retoma al relanzar con el mismo `run_id`).
 3. **cursos** (RF-19): Coursera, edX y Platzi → tabla `cursos`.
 4. **consolidar** (`pipeline/procesar.py`, por bloques de 1 500): limpieza → filtro de Colombia y ventana de 30 días →
-   duplicados en el bloque → duplicados contra el historial → clasificación (reglas, LLM para dudosas, respaldo) →
+   duplicados en el bloque → duplicados contra el historial → clasificación (reglas; dudosas → respaldo) →
    se descartan no relevantes → softwares, idiomas, habilidades → guardado → no catalogados. Si el corte tiene menos
    ofertas que la meta (10 000), **mini corrida** con los términos *ampliado* (presupuesto de tiempo configurable) y
    se procesa de nuevo. Al final, el reporte (RF-15) queda en `ejecuciones`.
@@ -50,7 +50,7 @@ y una marca `procesada`. Relanzar con el mismo `run_id` nunca duplica.
 | RF-03 Otras fuentes | Indeed (JobSpy), Computrabajo (requests + BeautifulSoup) | `scraper/jobspy_fuentes.py`, `scraper/computrabajo.py` |
 | RF-04 Campos | Diccionario de datos sec. 9 | `db/modelos.py` (`Oferta`, `OfertaSoftware`, `Catalogo`, `Ejecucion`), `pipeline/limpieza.py` |
 | RF-05 Softwares | Catálogo + sinónimos, palabra completa, reglas para ambiguos | `pipeline/software.py`, tablas `catalogo`/`sinonimos` |
-| RF-06 Carrera | Reglas + LLM gratuito para dudosas; descarta no relevantes; hasta 5 carreras | `pipeline/clasificacion.py`, `pipeline/llm.py` |
+| RF-06 Carrera | Reglas deterministas; dudosas con respaldo (puntaje ≥ 3); hasta 5 carreras | `pipeline/clasificacion.py`, `pipeline/procesar.py` |
 | RF-07 Limpieza | Textos, ciudades, fechas, empresas; quita correos, teléfonos y salarios | `texto.py`, `pipeline/limpieza.py` |
 | RF-08 Duplicados | Empresa + cargo + ciudad normalizados, fechas < 7 días, gana la descripción más larga; dentro y entre ejecuciones y fuentes | `pipeline/dedup.py`, `pipeline/procesar.py` |
 | RF-09 Corte | Semestre, corte, fecha en cada ejecución y oferta | `orquestador.py` |
@@ -104,18 +104,18 @@ En bases ya pobladas: `python -m observatorio.run purga-reglas` (vista previa co
 
 Con `config.requiere_software_o_habilidad = true` (por defecto), una oferta clasificada como relevante solo se guarda si
 menciona software del catálogo (salvo Office genérico aislado) o una habilidad técnica cursable (`pipeline/valor_formativo.py`).
-El LLM (`openrouter/free`) devuelve además `habilidades_tecnicas` y `tiene_habilidad_cursable`; si no hay LLM, aplican solo reglas y catálogo.
+Solo reglas y catálogo de software/habilidades (sin clasificación por IA).
 
 ### Clasificación y relevancia (RF-06)
 Puntaje por carrera = 3 × palabras fuertes del título + 2 × mención explícita de la carrera en la descripción +
 mín(palabras débiles, 3) + 1 si el término de búsqueda es de esa carrera (`config.reglas_carrera`).
 - Título con palabra específica de una carrera → relevante (principal = mayor puntaje; secundarias con palabra en el título o puntaje ≥ 3; máx. 5).
 - Título en `exclusion_titulo` sin palabra específica (jefe/coordinador/gerente no cuentan) → no relevante.
-- Sin señales → no relevante. Solo descripción/término → **dudosa** → LLM.
+- Sin señales → no relevante. Solo descripción/término → **dudosa** → **respaldo**: relevante si puntaje ≥ 3 por carrera.
 - Relevante por carrera pero sin software ni habilidad cursable → no se guarda (no cuenta para la meta).
-- LLM (`pipeline/llm.py`): OpenRouter modelo fijo `openrouter/free`, ~12 req/min por defecto, reintentos 429, circuit breaker, caché por hash
-  (1 000) y por corrida (600), 16 solicitudes/min, espera ante 429. Sin clave o sin cupo → **respaldo**: relevante si puntaje ≥ 3.
-  El reporte muestra cuántas se clasificaron con LLM y cuántas por respaldo.
+- La tabla `llm_cache` en Postgres se conserva por historial; el pipeline ya no la usa.
+
+El reporte de ejecución muestra cuántas ofertas dudosas resolvió la regla de respaldo (`uso_llm.dudosas_respaldo`).
 
 ### Duplicados (RF-08)
 Clave = empresa normalizada (sin S.A.S., Ltda, Colombia…) | cargo normalizado (sin marcas de género) | ciudad normalizada.
@@ -240,7 +240,7 @@ URL: `https://SU-DOMINIO/mcp`
 ## 9. Pruebas y calidad
 
 `pytest` cubre: normalización, duplicados, detección de softwares (incluye R y SAS ambiguos), clasificación, lectores HTML,
-corrida de punta a punta con datos sintéticos, LLM simulado, API (Google simulado, dominio, pendientes, roles, workflow_dispatch
+corrida de punta a punta con datos sintéticos, API (Google simulado, dominio, pendientes, roles, workflow_dispatch
 simulado, CSV públicos) y MCP (lectura pública, ocultamiento de herramientas de admin, token con hash y revocación, límite por IP).
 `.github/workflows/pruebas.yml` corre las pruebas y el build del front en cada push.
 

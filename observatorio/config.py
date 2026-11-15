@@ -17,11 +17,6 @@ except Exception:  # pragma: no cover
     pass
 
 
-# Único endpoint grativo documentado por OpenRouter para clasificación.
-# https://openrouter.ai/openrouter/free
-MODELO_OPENROUTER_GRATIS = "openrouter/free"
-
-
 def _lista(valor: str) -> list[str]:
     return [x.strip() for x in (valor or "").split(",") if x.strip()]
 
@@ -72,7 +67,6 @@ def normalizar_url_bd(url: str) -> str:
 @dataclass
 class Ajustes:
     database_url: str = ""
-    openrouter_api_key: str = ""
     google_client_id: str = ""
     dominio_permitido: str = "unal.edu.co"
     admins_iniciales: list[str] = field(default_factory=list)
@@ -91,7 +85,6 @@ def ajustes() -> Ajustes:
     """Lee el entorno en cada llamada (barato y amigable con las pruebas)."""
     return Ajustes(
         database_url=normalizar_url_bd(os.getenv("DATABASE_URL", "")),
-        openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
         google_client_id=os.getenv("GOOGLE_CLIENT_ID", ""),
         dominio_permitido=os.getenv("DOMINIO_PERMITIDO", "unal.edu.co").lstrip("@").lower(),
         admins_iniciales=[e.lower() for e in _lista(

@@ -62,22 +62,6 @@ POR_DEFECTO: dict[str, dict[str, Any]] = {
         "valor": {"alcance": "global", "dias": 7},
         "descripcion": "Duplicados (RF-08): misma empresa + cargo + ciudad con fechas a menos de N días. alcance=global compara contra todo el historial; alcance=corte solo dentro del mismo semestre y corte.",
     },
-    "llm": {
-        "valor": {
-            "habilitado": True,
-            "tamano_lote": 20,
-            "max_solicitudes_dia": 50,
-            "solicitudes_por_minuto": 12,
-            "max_solicitudes_corrida": 600,
-            "timeout_segundos": 60,
-            "max_fallos_consecutivos_lote": 8,
-            "max_fallos_json_corrida": 200,
-        },
-        "descripcion": "Clasificación con OpenRouter solo para ofertas dudosas. Modelo fijo openrouter/free "
-                       "(tier gratuito ~20 req/min; cupo diario según créditos OpenRouter, p. ej. 50–1000/día). "
-                       "solicitudes_por_minuto conservador (12) para evitar 429. Tras muchos JSON inválidos "
-                       "o respuestas cortadas, el resto usa reglas sin tumbar la corrida.",
-    },
     "reglas_carrera": {
         "valor": {
             "Contaduría Pública": {

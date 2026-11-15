@@ -14,7 +14,6 @@ from observatorio.db.crudas import (
     ERRORES_CONEXION_BD,
     es_error_conexion_bd,
     esperar_backoff_reintento,
-    liberar_conexion_para_espera,
     recuperar_sesion_db,
 )
 
@@ -23,7 +22,6 @@ from observatorio.pipeline.clasificacion import ClasificadorReglas, Clasificacio
 from observatorio.pipeline.dedup import _cerca, deduplicar
 from observatorio.pipeline.habilidades import detectar_blandas, detectar_idiomas
 from observatorio.pipeline.limpieza import normalizar_cruda
-from observatorio.pipeline.llm import ClienteLLM
 from observatorio.pipeline.no_catalogados import contar_no_catalogados
 from observatorio.pipeline.software import DetectorSoftware
 from observatorio.pipeline.valor_formativo import oferta_tiene_valor_formativo, tiene_descripcion_util
@@ -47,7 +45,6 @@ class ResultadoProceso:
     actualizadas: int = 0
     no_relevantes: int = 0
     guardadas: int = 0
-    por_llm: int = 0
     por_respaldo: int = 0
     no_catalogados: Counter = field(default_factory=Counter)
     originales_nc: dict = field(default_factory=dict)
@@ -55,12 +52,12 @@ class ResultadoProceso:
 
     def sumar(self, otro: "ResultadoProceso") -> None:
         for k in ("crudas", "fuera_de_colombia", "fuera_de_capital", "fuera_de_ventana", "filtradas_tipo", "duplicados",
-                  "actualizadas", "no_relevantes", "guardadas", "por_llm", "por_respaldo"):
+                  "actualizadas", "no_relevantes", "guardadas", "por_respaldo"):
             setattr(self, k, getattr(self, k) + getattr(otro, k))
 
 
 class Procesador:
-    def __init__(self, s: Session, ejec: Ejecucion, cfg: dict, usar_llm: bool = True):
+    def __init__(self, s: Session, ejec: Ejecucion, cfg: dict):
         self.s = s
         self.ejec = ejec
         self.cfg = cfg
@@ -71,10 +68,6 @@ class Procesador:
             cfg["carreras"],
             cfg.get("exclusion_operativa_titulo") or [],
         )
-        llm_cfg = dict(cfg.get("llm") or {})
-        if not usar_llm:
-            llm_cfg["habilitado"] = False
-        self.llm = ClienteLLM(s, llm_cfg, cfg["carreras"], id_corrida=ejec.id_ejecucion)
         self.dedup_dias = int(cfg["dedup"].get("dias", 7))
         self.alcance = cfg["dedup"].get("alcance", "global")
         self.sufijo = "" if self.alcance == "global" else f"@{ejec.semestre}-{ejec.corte}"
@@ -168,71 +161,14 @@ class Procesador:
                 self._aplicar_software(previa)
                 r.actualizadas += 1
 
-        # 3) clasificación: reglas, luego LLM para dudosas
+        # 3) clasificación: reglas; dudosas → regla de respaldo (sin LLM)
         clasif: dict[str, Clasificacion] = {}
-        dudosas = []
         for u in nuevas:
             c = self.clasificador.clasificar(u["cargo"], u["descripcion"], u.get("carrera_termino"))
-            clasif[u["id_oferta"]] = c
             if c.estado == "dudosa":
-                dudosas.append(u)
-        if dudosas:
-            liberar_conexion_para_espera(self.s)
-            try:
-                respuestas = (
-                    self.llm.clasificar([{"id": u["id_oferta"], **u} for u in dudosas])
-                    if self.llm.habilitado
-                    else {}
-                )
-            except ERRORES_CONEXION_BD:
-                recuperar_sesion_db(self.s)
-                raise
-            except Exception as e:  # noqa: BLE001 — el LLM no debe tumbar la consolidación
-                if es_error_conexion_bd(e):
-                    recuperar_sesion_db(self.s)
-                    raise
-                log.warning("Clasificación LLM interrumpida en bloque; se usan reglas de respaldo: %s", e)
-                respuestas = {}
-            for u in dudosas:
-                c = clasif[u["id_oferta"]]
-                res = respuestas.get(u["id_oferta"])
-                if res is not None:
-                    r.por_llm += 1
-                    relevante_llm = res["relevante"]
-                    if relevante_llm and self.requiere_formativo:
-                        ok, motivo_vf = oferta_tiene_valor_formativo(
-                            u["cargo"],
-                            u.get("descripcion") or "",
-                            self.detector,
-                            empresa=u.get("empresa") or "",
-                            habilidades_llm=res.get("habilidades_tecnicas"),
-                            herramientas_llm=res.get("herramientas_no_catalogadas"),
-                            tiene_habilidad_cursable_llm=res.get("tiene_habilidad_cursable"),
-                        )
-                        if not ok:
-                            relevante_llm = False
-                            motivo_llm = f"LLM relevante pero sin valor formativo ({motivo_vf})"
-                        else:
-                            motivo_llm = "LLM"
-                    else:
-                        motivo_llm = "LLM"
-                    clasif[u["id_oferta"]] = Clasificacion(
-                        "relevante" if relevante_llm else "no_relevante",
-                        res["carreras"] if relevante_llm else [],
-                        c.puntajes,
-                        motivo_llm,
-                        "llm",
-                    )
-                    for h in res.get("herramientas_no_catalogadas") or []:
-                        if not self.detector.coincide_algun_sinonimo(h):
-                            k = normalizar_clave(h)
-                            if k:
-                                r.no_catalogados[k] += 1
-                                r.originales_nc.setdefault(k, h)
-                                r.ejemplo_nc.setdefault(k, u["id_oferta"])
-                else:
-                    r.por_respaldo += 1
-                    clasif[u["id_oferta"]] = ClasificadorReglas.respaldo(c)
+                c = ClasificadorReglas.respaldo(c)
+                r.por_respaldo += 1
+            clasif[u["id_oferta"]] = c
 
         # 4) guardar relevantes
         guardadas_dicts = []
@@ -241,7 +177,7 @@ class Procesador:
             if c.estado != "relevante" or not c.carreras:
                 r.no_relevantes += 1
                 continue
-            if self.requiere_formativo and c.clasificado_por != "llm" and tiene_descripcion_util(u.get("descripcion")):
+            if self.requiere_formativo and tiene_descripcion_util(u.get("descripcion")):
                 ok, _ = oferta_tiene_valor_formativo(
                     u["cargo"],
                     u.get("descripcion") or "",

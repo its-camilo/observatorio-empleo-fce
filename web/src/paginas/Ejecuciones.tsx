@@ -117,7 +117,7 @@ export function Reporte({ e }: { e: Ejecucion }) {
           <ul className="list-disc pl-5 text-sm text-amber-800">{e.errores_detalle.map((x, i) => <li key={i}>{x}</li>)}</ul>
         </div>
       )}
-      {e.uso_llm && <p className="mt-2 text-xs text-texto-suave">Clasificación con IA: {JSON.stringify(e.uso_llm)}</p>}
+      {e.uso_llm && <p className="mt-2 text-xs text-texto-suave">Clasificación: {JSON.stringify(e.uso_llm)}</p>}
     </div>
   );
 }
