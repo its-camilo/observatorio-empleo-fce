@@ -6,6 +6,7 @@ from collections import Counter
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from observatorio.filtro_ofertas import oferta_incluida_en_resultados
 from observatorio.normas_corrida import NOMBRES_FUENTE
 from observatorio.plan_extraccion import presupuesto_fuente_carrera, presupuesto_por_carrera, presupuesto_por_fuente
 
@@ -56,6 +57,7 @@ def contar_guardadas_fuente(s: Session, id_ejecucion: str, fuente_key: str) -> i
             select(func.count()).select_from(Oferta).where(
                 Oferta.id_ejecucion == id_ejecucion,
                 Oferta.fuente == nombre,
+                oferta_incluida_en_resultados(),
             )
         )
         or 0
@@ -70,6 +72,7 @@ def contar_guardadas_carrera(s: Session, id_ejecucion: str, carrera: str) -> int
             select(func.count()).select_from(Oferta).where(
                 Oferta.id_ejecucion == id_ejecucion,
                 Oferta.carrera_principal == carrera,
+                oferta_incluida_en_resultados(),
             )
         )
         or 0
@@ -86,6 +89,7 @@ def contar_guardadas_fuente_carrera(s: Session, id_ejecucion: str, fuente_key: s
                 Oferta.id_ejecucion == id_ejecucion,
                 Oferta.fuente == nombre,
                 Oferta.carrera_principal == carrera,
+                oferta_incluida_en_resultados(),
             )
         )
         or 0

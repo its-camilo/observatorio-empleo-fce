@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from observatorio.db.modelos import Catalogo, Curso, Ejecucion, Oferta, OfertaSoftware
+from observatorio.filtro_ofertas import oferta_incluida_en_resultados
 
 COLUMNAS = {
     "ofertas": ["id_oferta", "fuente", "url", "fecha_publicacion", "fecha_extraccion", "semestre", "corte", "cargo", "empresa",
@@ -52,7 +53,7 @@ def filas(s: Session, tabla: str, semestre: str | None = None, corte: str | None
         return q
 
     if tabla == "ofertas":
-        q = filtrar(select(Oferta), Oferta)
+        q = filtrar(select(Oferta).where(oferta_incluida_en_resultados()), Oferta)
         if carrera:
             q = q.where(Oferta.carrera.contains(carrera))
         q = q.order_by(Oferta.id_oferta).offset(desde)
@@ -64,13 +65,28 @@ def filas(s: Session, tabla: str, semestre: str | None = None, corte: str | None
                 d["descripcion"] = ""
             yield d
     elif tabla == "oferta_software":
-        q = filtrar(select(OfertaSoftware), OfertaSoftware).order_by(OfertaSoftware.id).offset(desde)
+        q = (
+            filtrar(select(OfertaSoftware), OfertaSoftware)
+            .join(Oferta, OfertaSoftware.id_oferta == Oferta.id_oferta)
+            .where(oferta_incluida_en_resultados())
+            .order_by(OfertaSoftware.id)
+            .offset(desde)
+        )
         if limite:
             q = q.limit(limite)
         for o in s.scalars(q):
             yield {c: getattr(o, c) for c in COLUMNAS["oferta_software"]}
     elif tabla == "oferta_carrera":
-        q = filtrar(select(Oferta.id_oferta, Oferta.carrera, Oferta.semestre, Oferta.corte), Oferta).order_by(Oferta.id_oferta).offset(desde)
+        q = (
+            filtrar(
+                select(Oferta.id_oferta, Oferta.carrera, Oferta.semestre, Oferta.corte).where(
+                    oferta_incluida_en_resultados()
+                ),
+                Oferta,
+            )
+            .order_by(Oferta.id_oferta)
+            .offset(desde)
+        )
         if limite:
             q = q.limit(limite)
         for idf, car, sem, cor in s.execute(q):

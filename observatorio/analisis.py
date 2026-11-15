@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from observatorio.db.modelos import Ejecucion, Oferta, OfertaSoftware
+from observatorio.filtro_ofertas import oferta_incluida_en_resultados
 
 ORDEN_CORTE = {"Inicio": 1, "Mitad": 2, "Final": 3}
 UMBRAL_IGUAL_PP = 0.5  # variación menor a 0,5 puntos porcentuales = "igual"
@@ -23,7 +24,11 @@ def clave_corte(semestre: str, corte: str) -> tuple:
 
 
 def cortes_disponibles(s: Session) -> list[dict]:
-    filas = s.execute(select(Oferta.semestre, Oferta.corte, func.count()).group_by(Oferta.semestre, Oferta.corte)).all()
+    filas = s.execute(
+        select(Oferta.semestre, Oferta.corte, func.count())
+        .where(oferta_incluida_en_resultados())
+        .group_by(Oferta.semestre, Oferta.corte)
+    ).all()
     salida = [{"semestre": a, "corte": b, "ofertas": n} for a, b, n in filas]
     return sorted(salida, key=lambda x: clave_corte(x["semestre"], x["corte"]))
 
@@ -37,11 +42,24 @@ def corte_anterior(s: Session, semestre: str, corte: str) -> tuple[str, str] | N
 
 def _ofertas_por_carrera(s: Session, semestre: str, corte: str) -> Counter:
     c: Counter = Counter()
-    for (carrera,) in s.execute(select(Oferta.carrera).where(Oferta.semestre == semestre, Oferta.corte == corte)):
+    for (carrera,) in s.execute(
+        select(Oferta.carrera).where(
+            Oferta.semestre == semestre,
+            Oferta.corte == corte,
+            oferta_incluida_en_resultados(),
+        )
+    ):
         for x in (carrera or "").split("; "):
             if x:
                 c[x] += 1
-    c["Todas"] = s.scalar(select(func.count()).select_from(Oferta).where(Oferta.semestre == semestre, Oferta.corte == corte)) or 0
+    c["Todas"] = (
+        s.scalar(
+            select(func.count())
+            .select_from(Oferta)
+            .where(Oferta.semestre == semestre, Oferta.corte == corte, oferta_incluida_en_resultados())
+        )
+        or 0
+    )
     return c
 
 
@@ -151,7 +169,9 @@ def _advertencias_comparabilidad(s: Session, sa: str, ca: str, sb: str, cb: str)
 def top_softwares_corte(s: Session, semestre: str, corte: str, limite: int = 10) -> list[dict]:
     """Top softwares por SQL (más rápido que ranking completo para el dashboard)."""
     total = s.scalar(
-        select(func.count()).select_from(Oferta).where(Oferta.semestre == semestre, Oferta.corte == corte)
+        select(func.count()).select_from(Oferta).where(
+            Oferta.semestre == semestre, Oferta.corte == corte, oferta_incluida_en_resultados()
+        )
     ) or 0
     q = (
         select(OfertaSoftware.software, func.count())
@@ -174,15 +194,35 @@ def top_softwares_corte(s: Session, semestre: str, corte: str, limite: int = 10)
 
 def resumen_corte(s: Session, semestre: str, corte: str, *, para_dashboard: bool = False) -> dict:
     def agrupar(col):
-        q = select(col, func.count()).where(Oferta.semestre == semestre, Oferta.corte == corte).group_by(col).order_by(func.count().desc())
+        q = (
+            select(col, func.count())
+            .where(Oferta.semestre == semestre, Oferta.corte == corte, oferta_incluida_en_resultados())
+            .group_by(col)
+            .order_by(func.count().desc())
+        )
         return {str(k or "Sin dato"): n for k, n in s.execute(q)}
 
-    total = s.scalar(select(func.count()).select_from(Oferta).where(Oferta.semestre == semestre, Oferta.corte == corte)) or 0
-    con_sw = s.scalar(
-        select(func.count()).select_from(Oferta).where(
-            Oferta.semestre == semestre, Oferta.corte == corte, Oferta.num_softwares > 0
+    total = (
+        s.scalar(
+            select(func.count())
+            .select_from(Oferta)
+            .where(Oferta.semestre == semestre, Oferta.corte == corte, oferta_incluida_en_resultados())
         )
-    ) or 0
+        or 0
+    )
+    con_sw = (
+        s.scalar(
+            select(func.count())
+            .select_from(Oferta)
+            .where(
+                Oferta.semestre == semestre,
+                Oferta.corte == corte,
+                Oferta.num_softwares > 0,
+                oferta_incluida_en_resultados(),
+            )
+        )
+        or 0
+    )
     top = top_softwares_corte(s, semestre, corte, 10) if para_dashboard else ranking(s, semestre, corte, None, con_variacion=False)[:10]
     salida = {
         "semestre": semestre, "corte": corte, "total_ofertas": total, "ofertas_con_software": con_sw,

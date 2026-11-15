@@ -27,6 +27,7 @@ import sys
 ACCIONES = (
     "completa", "preparar", "extraer", "extraer-fuente", "extraer-secuencial", "cursos", "consolidar", "reporte",
     "exportar", "migrar", "semilla", "purga-operativa", "purga-reglas", "cerrar-corrida", "cerrar-colgadas",
+    "ajustar-proporciones",
 )
 
 # Comandos de mantenimiento / export que no requieren id de ejecución de corrida.
@@ -244,6 +245,13 @@ def main(argv: list[str] | None = None) -> int:
             ids = [x.strip() for x in a.ids.split(",")] if a.ids else None
             res = cerrar_corridas_colgadas(s, ids=ids, consultar_github=True, forzar_ids=a.forzar)
             print(json.dumps(res, ensure_ascii=False))
+            return 0
+        if a.accion == "ajustar-proporciones":
+            if not a.run_id:
+                p.error("Indique --run-id")
+            e = orq.ajustar_proporciones_corrida(s, a.run_id)
+            imprimir_reporte(e)
+            print(json.dumps((e.parametros or {}).get("ajuste_proporcion") or {}, ensure_ascii=False, indent=2))
             return 0
         if a.accion == "reporte":
             e = s.get(Ejecucion, a.run_id)
