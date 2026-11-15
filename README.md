@@ -23,7 +23,7 @@ duplicados y deja una base limpia lista para **Power BI**, con rankings por carr
 ```
 observatorio/            Paquete Python
   scraper/               Una parte por fuente: linkedin.py, jobspy_fuentes.py (Indeed), computrabajo.py, cursos.py, http.py
-  pipeline/              limpieza.py, dedup.py, software.py, clasificacion.py, llm.py, habilidades.py, no_catalogados.py, procesar.py
+  pipeline/              limpieza.py, dedup.py, software.py, clasificacion.py, habilidades.py, no_catalogados.py, procesar.py
   db/                    modelos.py (tablas), sesion.py, semilla.py
   datos/                 catalogo.json y terminos.json (carga inicial; luego se editan en el aplicativo)
   api/                   FastAPI: main.py, seguridad.py, rutas/
@@ -53,7 +53,6 @@ Copie `.env.example` a `.env` (nunca suba `.env`). En Vercel y GitHub se configu
 | `GOOGLE_CLIENT_ID` | Vercel, servidor | Cliente OAuth de Google (`745533004054-gub9dlpg373msnfq05gnhev4jjethhp9.apps.googleusercontent.com`) |
 | `GITHUB_TOKEN` | Vercel, servidor | Token *fine-grained* con permiso **Actions: Read and write** sobre el repositorio, para lanzar corridas |
 | `GITHUB_REPO` | Vercel, servidor | `its-camilo/observatorio-empleo-fce` |
-| `OPENROUTER_API_KEY` | GitHub (secreto) | Opcional. Clasifica ofertas dudosas vía `openrouter/free` (tier ~20 req/min) |
 | `PROXIES` | GitHub (secreto) | Opcional. Proxies separados por coma, rotan por petición |
 | `ADMINS_INICIALES` | opcional | Por defecto `uniic_bog@unal.edu.co,clagosm@unal.edu.co` |
 | `CSV_TOKEN` | opcional | Protege las URL CSV de Power BI (`?token=`) |
@@ -90,8 +89,7 @@ Escribe en la base indicada por `DATABASE_URL` y aparece en el aplicativo igual 
 
 ## GitHub Actions
 
-1. *Settings → Secrets and variables → Actions*: secretos `DATABASE_URL` (obligatorio), `OPENROUTER_API_KEY` y `PROXIES` (opcionales);
-   (no hace falta variable de modelos: siempre `openrouter/free`).
+1. *Settings → Secrets and variables → Actions*: secretos `DATABASE_URL` (obligatorio) y `PROXIES` (opcional).
 2. El workflow **Corrida del Observatorio** (`.github/workflows/corrida.yml`) recibe `semestre`, `corte`, `run_id`, `modo`.
    Se lanza desde el aplicativo, desde el MCP (admins) o a mano en *Actions → Run workflow*.
 3. Trabajos: `preparar` → `extraer` (matriz por fuente y fragmento, hasta 6 en paralelo, ~5,5 h cada uno) + `cursos` →

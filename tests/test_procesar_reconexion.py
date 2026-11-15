@@ -28,8 +28,6 @@ def _cruda(id_ejecucion: str, sufijo: str, cargo: str) -> OfertaCruda:
 def test_procesar_pendientes_reintenta_bloque_sin_duplicar(sesion, monkeypatch):
     monkeypatch.setattr(mod_procesar, "TAMANO_BLOQUE", 1)
     monkeypatch.setattr(mod_procesar, "REINTENTOS_BLOQUE", 3)
-    monkeypatch.setenv("OPENROUTER_API_KEY", "")
-
     idx = "recon-bd-1"
     sesion.add(Ejecucion(id_ejecucion=idx, semestre="2026-II", corte="Mitad", estado="en_curso"))
     sesion.add(_cruda(idx, "a", "contador público"))
@@ -37,7 +35,7 @@ def test_procesar_pendientes_reintenta_bloque_sin_duplicar(sesion, monkeypatch):
     sesion.commit()
 
     ejec = sesion.get(Ejecucion, idx)
-    proc = Procesador(sesion, ejec, leer_config(sesion), usar_llm=False)
+    proc = Procesador(sesion, ejec, leer_config(sesion))
 
     commits = {"n": 0}
     real_commit = sesion.commit

@@ -19,7 +19,7 @@ def test_analista_administrativo_sap_sigue_relevante_y_con_valor(detector):
     cargo = "Analista administrativo"
     assert not titulo_excluido_operativo(cargo, patrones)
     ok, motivo = oferta_tiene_valor_formativo(cargo, "Experiencia en módulos SAP FI", detector)
-    assert ok and motivo in ("software_catalogo", "habilidad_tecnica", "llm_habilidad_cursable")
+    assert ok and motivo in ("software_catalogo", "habilidad_tecnica")
 
 
 def test_oferta_sin_software_ni_habilidad(detector):

@@ -116,18 +116,11 @@ def oferta_tiene_valor_formativo(
     detector: DetectorSoftware,
     *,
     empresa: str = "",
-    habilidades_llm: list[str] | None = None,
-    herramientas_llm: list[str] | None = None,
-    tiene_habilidad_cursable_llm: bool | None = None,
 ) -> tuple[bool, str]:
     """
     True si la oferta tiene software relevante o habilidad técnica cursable.
     El segundo elemento es un motivo corto para logs o purga.
     """
-    if tiene_habilidad_cursable_llm is True:
-        return True, "llm_habilidad_cursable"
-    if herramientas_llm and any(h.strip() for h in herramientas_llm):
-        return True, "llm_herramienta"
     texto = f"{cargo or ''}\n{descripcion or ''}"
     detectados = detector.detectar(cargo or "", descripcion or "", empresa or "")
     if _software_cuenta(detectados):
@@ -143,10 +136,6 @@ def oferta_tiene_valor_formativo(
         if re.search(r"\bexcel\b", plegar(texto)) and not _BASICO_OFFICE.search(plegar(descripcion or "")):
             if "excel" not in habs and "excel avanzado" not in habs:
                 habs.append("excel (rol profesional)")
-    if habilidades_llm:
-        for h in habilidades_llm:
-            if h and h.strip():
-                habs = habs + [h.strip()[:80]]
     if habs:
         return True, "habilidad_tecnica"
     if detectados and _software_cuenta(detectados):
