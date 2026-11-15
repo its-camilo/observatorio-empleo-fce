@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from observatorio import analisis
 from observatorio.api.seguridad import get_db, solo_admin, usuario_actual
 from observatorio.config import ajustes
-from observatorio.consultas import buscar_ofertas, listar_cursos, oferta_resumen, valores_filtros
+from observatorio.consultas import buscar_ofertas, listar_cursos, listar_temas_recomendados, oferta_resumen, valores_filtros
 from observatorio.cache_respuesta import obtener_o_calcular
 from observatorio.db.modelos import Ejecucion, Oferta, Usuario, Validacion, ahora
 from observatorio.normas_corrida import normalizar_corte, normalizar_semestre
@@ -187,7 +187,7 @@ def csv_publico(tabla: str, semestre: str | None = None, corte: str | None = Non
     esperado = ajustes().csv_token
     if esperado and token != esperado:
         raise HTTPException(401, "Token de CSV no válido")
-    if tabla not in ("ofertas", "oferta_software", "oferta_carrera", "catalogo", "ejecuciones", "cursos"):
+    if tabla not in ("ofertas", "oferta_software", "oferta_carrera", "catalogo", "ejecuciones", "cursos", "temas_recomendados"):
         raise HTTPException(404, "Tabla no disponible")
     from observatorio.exportar import a_csv, filas
 
@@ -270,6 +270,25 @@ def revisar(vid: int, d: RevisionIn, u: Usuario = Depends(solo_admin), s: Sessio
 
 # ----------------------------------------------------------------- cursos (RF-19)
 @router.get("/cursos")
-def cursos(semestre: str | None = None, corte: str | None = None, plataforma: str | None = None, termino: str | None = None,
-           _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
-    return listar_cursos(s, semestre, corte, plataforma, termino, limite=500)
+def cursos(
+    semestre: str | None = None,
+    corte: str | None = None,
+    plataforma: str | None = None,
+    termino: str | None = None,
+    carrera: str | None = None,
+    _: Usuario = Depends(usuario_actual),
+    s: Session = Depends(get_db),
+):
+    return listar_cursos(s, semestre, corte, plataforma, termino, carrera=carrera, limite=500)
+
+
+@router.get("/temas-recomendados")
+def temas_recomendados(
+    semestre: str = Query(..., min_length=4),
+    corte: str = Query(..., min_length=3),
+    carrera: str | None = None,
+    limite: int = Query(50, ge=1, le=200),
+    _: Usuario = Depends(usuario_actual),
+    s: Session = Depends(get_db),
+):
+    return listar_temas_recomendados(s, semestre, _corte(corte), carrera=carrera, limite=limite)

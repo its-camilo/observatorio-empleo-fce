@@ -710,6 +710,12 @@ def consolidar(s: Session, id_ejecucion: str, permitir_mini: bool = True) -> Eje
         proc.guardar_no_catalogados()
         aplicar_tras_consolidar(s, ejec, cfg)
         finalizar(s, ejec, proc)
+        cc = cfg.get("cursos") or {}
+        if cc.get("activo", True):
+            try:
+                extraer_cursos_corrida(s, id_ejecucion)
+            except Exception as e:  # noqa: BLE001
+                log.warning("Cursos tras consolidar falló (%s): %s", id_ejecucion, e)
         s.commit()
         return ejec
     except Exception as e:
@@ -884,28 +890,91 @@ def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:
 # Cursos (RF-19)
 # ---------------------------------------------------------------------------
 def extraer_cursos_corrida(s: Session, id_ejecucion: str, terminos: list[str] | None = None, max_por_termino: int | None = None) -> dict:
+    from observatorio.cursos_demanda import (
+        calcular_puntaje_recomendacion,
+        coincidencia_habilidad,
+        indice_demanda,
+        normalizar_senales_plataforma,
+        serializar_demanda_carreras,
+        terminos_para_busqueda_cursos,
+    )
     from observatorio.scraper.cursos import extraer_cursos
 
     cfg = leer_config(s)
     ejec = s.get(Ejecucion, id_ejecucion)
+    if ejec is None:
+        raise ValueError(f"No existe la ejecución {id_ejecucion}")
     cc = cfg.get("cursos") or {}
     if not cc.get("activo", True):
         return {"cursos": 0, "errores": ["Módulo de cursos desactivado"]}
-    cursos, errores = extraer_cursos(cc.get("plataformas", []), terminos or cc.get("terminos", []),
-                                     max_por_termino or int(cc.get("max_por_termino", 15)))
-    vistos = {u for (u,) in s.execute(select(Curso.url).where(Curso.id_ejecucion == id_ejecucion))}
+
+    demanda_list = terminos_para_busqueda_cursos(s, ejec.semestre, ejec.corte, cfg)
+    idx = indice_demanda(demanda_list)
+    consultas = terminos if terminos else [d.consulta for d in demanda_list]
+    consultas = list(dict.fromkeys(c.strip() for c in consultas if c and c.strip()))
+
+    cursos, errores = extraer_cursos(
+        cc.get("plataformas", []),
+        consultas,
+        max_por_termino or int(cc.get("max_por_termino", 15)),
+    )
+    peso = float(cc.get("peso_demanda_puntaje", 0.65))
+    normalizar_senales_plataforma(cursos)
+
+    for row in s.scalars(select(Curso).where(Curso.id_ejecucion == id_ejecucion)):
+        s.delete(row)
+
+    vistos: set[str] = set()
     n = 0
     for c in cursos:
-        if not c.get("url") or c["url"] in vistos:
+        url = c.get("url")
+        if not url or url in vistos:
             continue
-        vistos.add(c["url"])
-        s.add(Curso(id_ejecucion=id_ejecucion, semestre=ejec.semestre, corte=ejec.corte, fecha_extraccion=date.today(), **c))
+        vistos.add(url)
+        dem = coincidencia_habilidad(c.get("termino", ""), c.get("termino", ""), idx)
+        dem_pct = dem.pct if dem else 0.0
+        puntaje = calcular_puntaje_recomendacion(dem_pct, float(c.get("_senal_plat", 0)), peso)
+        s.add(
+            Curso(
+                id_ejecucion=id_ejecucion,
+                semestre=ejec.semestre,
+                corte=ejec.corte,
+                fecha_extraccion=date.today(),
+                habilidad_demanda=dem.habilidad if dem else c.get("termino"),
+                demanda_ofertas=dem.ofertas if dem else None,
+                demanda_pct=dem.pct if dem else None,
+                demanda_carreras=serializar_demanda_carreras(dem.por_carrera) if dem and dem.por_carrera else None,
+                puntaje_recomendacion=puntaje,
+                termino=c.get("termino"),
+                plataforma=c.get("plataforma"),
+                titulo=c.get("titulo", ""),
+                url=url,
+                organizacion=c.get("organizacion"),
+                nivel=c.get("nivel"),
+                tipo=c.get("tipo"),
+                calificacion=c.get("calificacion"),
+                num_calificaciones=c.get("num_calificaciones"),
+                inscritos_recientes=c.get("inscritos_recientes"),
+                posicion=c.get("posicion"),
+            )
+        )
         n += 1
+    meta = {
+        "consultas": consultas,
+        "habilidades_demanda": [{"habilidad": d.habilidad, "ofertas": d.ofertas, "pct": d.pct} for d in demanda_list],
+    }
+    params = dict(ejec.parametros or {})
+    params["cursos_demanda"] = meta
+    ejec.parametros = params
     if errores:
-        ejec.errores_detalle = list(ejec.errores_detalle or []) + errores
-        ejec.errores = "\n".join(ejec.errores_detalle)
+        det = list(ejec.errores_detalle or [])
+        for msg in errores:
+            if msg not in det:
+                det.append(msg)
+        ejec.errores_detalle = det
+        ejec.errores = "\n".join(det)
     s.commit()
-    return {"cursos": n, "errores": errores}
+    return {"cursos": n, "errores": errores, "terminos_busqueda": consultas}
 
 
 # ---------------------------------------------------------------------------
@@ -995,14 +1064,4 @@ def correr_completa(s: Session, semestre: str, corte: str, id_ejecucion: str | N
     for r in resumenes:
         log.info("Resumen extracción: %s", r)
     s.expire_all()
-    if cursos:
-        ejec.fase = "cursos"
-        s.commit()
-        try:
-            terminos = None
-            if limite_terminos:
-                terminos = (leer_config(s).get("cursos") or {}).get("terminos", [])[:max(1, limite_terminos)]
-            extraer_cursos_corrida(s, idx, terminos=terminos, max_por_termino=max_por_particion)
-        except Exception as e:  # noqa: BLE001
-            log.warning("Cursos falló: %s", e)
     return consolidar(s, idx, permitir_mini=(modo == "completa"))

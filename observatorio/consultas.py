@@ -80,7 +80,17 @@ def catalogo_publico(s: Session, solo_activos: bool = True) -> list[dict]:
     return [{"software": c.software, "grupo": c.grupo, "activo": c.activo, "sinonimos": [x.texto for x in c.sinonimos]} for c in s.scalars(q)]
 
 
-def listar_cursos(s: Session, semestre=None, corte=None, plataforma=None, termino=None, limite: int = 100) -> list[dict]:
+def listar_cursos(
+    s: Session,
+    semestre=None,
+    corte=None,
+    plataforma=None,
+    termino=None,
+    carrera=None,
+    limite: int = 100,
+) -> list[dict]:
+    import json
+
     q = select(Curso)
     if semestre:
         q = q.where(Curso.semestre == semestre)
@@ -89,10 +99,55 @@ def listar_cursos(s: Session, semestre=None, corte=None, plataforma=None, termin
     if plataforma:
         q = q.where(Curso.plataforma == plataforma)
     if termino:
-        q = q.where(Curso.termino.ilike(f"%{termino}%"))
-    q = q.order_by(Curso.fecha_extraccion.desc(), Curso.termino, Curso.plataforma, Curso.posicion).limit(limite)
-    return [{"plataforma": c.plataforma, "termino": c.termino, "posicion": c.posicion, "titulo": c.titulo, "url": c.url,
-             "organizacion": c.organizacion, "nivel": c.nivel, "tipo": c.tipo, "calificacion": c.calificacion,
-             "num_calificaciones": c.num_calificaciones, "inscritos_recientes": c.inscritos_recientes,
-             "semestre": c.semestre, "corte": c.corte, "fecha_extraccion": c.fecha_extraccion.isoformat() if c.fecha_extraccion else None}
-            for c in s.scalars(q)]
+        q = q.where(
+            Curso.termino.ilike(f"%{termino}%") | Curso.habilidad_demanda.ilike(f"%{termino}%")
+        )
+    q = q.order_by(Curso.puntaje_recomendacion.desc().nullslast(), Curso.demanda_pct.desc().nullslast(), Curso.posicion).limit(limite)
+    out: list[dict] = []
+    for c in s.scalars(q):
+        dem_car = None
+        if c.demanda_carreras:
+            try:
+                dem_car = json.loads(c.demanda_carreras)
+            except json.JSONDecodeError:
+                dem_car = None
+        if carrera and dem_car and carrera not in dem_car:
+            continue
+        out.append(
+            {
+                "plataforma": c.plataforma,
+                "termino": c.termino,
+                "habilidad_demanda": c.habilidad_demanda,
+                "demanda_ofertas": c.demanda_ofertas,
+                "demanda_pct": c.demanda_pct,
+                "demanda_carreras": dem_car,
+                "puntaje_recomendacion": c.puntaje_recomendacion,
+                "posicion": c.posicion,
+                "titulo": c.titulo,
+                "url": c.url,
+                "organizacion": c.organizacion,
+                "nivel": c.nivel,
+                "tipo": c.tipo,
+                "calificacion": c.calificacion,
+                "num_calificaciones": c.num_calificaciones,
+                "inscritos_recientes": c.inscritos_recientes,
+                "semestre": c.semestre,
+                "corte": c.corte,
+                "fecha_extraccion": c.fecha_extraccion.isoformat() if c.fecha_extraccion else None,
+            }
+        )
+    return out
+
+
+def listar_temas_recomendados(
+    s: Session,
+    semestre: str,
+    corte: str,
+    carrera: str | None = None,
+    limite: int = 50,
+) -> list[dict]:
+    from observatorio.cursos_demanda import temas_recomendados_dictado
+    from observatorio.parametros import leer_config
+
+    cfg = leer_config(s)
+    return temas_recomendados_dictado(s, semestre, corte.capitalize(), cfg, carrera=carrera, limite=limite)
