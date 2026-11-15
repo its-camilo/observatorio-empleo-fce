@@ -10,6 +10,7 @@ from observatorio.proporciones_finales import (
     factible_total,
     max_total_factible,
     recomputar_ajuste_proporcion,
+    resolver_conteos_celdas,
     seleccionar_por_omision,
     _score_ofertas,
 )
@@ -55,9 +56,7 @@ def test_seleccion_respeta_tolerancia_y_limita_admin():
     for s in kept:
         por_f[s.fuente_key] = por_f.get(s.fuente_key, 0) + 1
         por_c[s.carrera] = por_c.get(s.carrera, 0) + 1
-    from observatorio.proporciones_finales import sin_sobre_representacion
-
-    assert sin_sobre_representacion(por_f, por_c, len(kept), p_src, p_car, 5.0)
+    assert dentro_tolerancia(por_f, por_c, len(kept), p_src, p_car, 5.0)
     admin_n = por_c.get("Administración de Empresas", 0)
     assert admin_n <= max(5, int(0.06 * len(kept)))
 
@@ -99,9 +98,7 @@ def test_omision_baja_computrabajo_exceso(sesion):
     total_c = sum(pc.values())
     p_src = {f: pf[f] / total_f for f in pf}
     p_car = {c: pc[c] / total_c for c in pc}
-    from observatorio.proporciones_finales import sin_sobre_representacion
-
-    assert sin_sobre_representacion(por_f, por_c, activas, p_src, p_car, 5.0)
+    assert dentro_tolerancia(por_f, por_c, activas, p_src, p_car, 5.0)
     admin = por_c.get("Administración de Empresas", 0)
     assert admin <= pc["Administración de Empresas"] + max(3, int(0.05 * activas))
 
@@ -126,6 +123,38 @@ def test_ajuste_deshabilitado_deja_todo(sesion):
     assert res.get("aplicado") is False
     assert sesion.query(Oferta).filter(Oferta.id_ejecucion == "prop-off").count() == 30
     assert all(not o.excluida_resultado_corrida for o in sesion.query(Oferta).filter(Oferta.id_ejecucion == "prop-off"))
+
+
+def test_regression_mitad_35d921_proporciones():
+    """Regresión datos reales corrida 2026-II-mitad-35d921 (antes greedy dejaba 921 fuera de tolerancia)."""
+    econ = "Economía"
+    cont = "Contaduría Pública"
+    adm = "Administración de Empresas"
+    av_fc = {
+        ("linkedin", econ): 416,
+        ("linkedin", adm): 63,
+        ("linkedin", cont): 202,
+        ("indeed", econ): 104,
+        ("indeed", adm): 15,
+        ("indeed", cont): 37,
+        ("computrabajo", econ): 280,
+        ("computrabajo", adm): 18,
+        ("computrabajo", cont): 511,
+    }
+    p_src = {"linkedin": 0.6206, "indeed": 0.2021, "computrabajo": 0.1773}
+    p_car = {econ: 0.5375, cont: 0.4524, adm: 0.0101}
+    counts = resolver_conteos_celdas(av_fc, p_src, p_car, 5.0)
+    total = sum(counts.values())
+    assert total >= 1000
+    por_f: dict[str, int] = {}
+    por_c: dict[str, int] = {}
+    for (f, c), n in counts.items():
+        por_f[f] = por_f.get(f, 0) + n
+        por_c[c] = por_c.get(c, 0) + n
+    assert dentro_tolerancia(por_f, por_c, total, p_src, p_car, 5.0)
+    assert counts[("indeed", econ)] == 104
+    assert counts[("indeed", adm)] == 15
+    assert counts[("indeed", cont)] == 37
 
 
 def test_max_total_factible_admin_pequena():

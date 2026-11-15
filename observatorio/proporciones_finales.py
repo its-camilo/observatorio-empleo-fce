@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import logging
-import math
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
 from typing import Iterable
 
+import numpy as np
+from scipy.optimize import Bounds, LinearConstraint, milp
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -42,13 +44,19 @@ def _config_ajuste(cfg: dict) -> tuple[bool, float]:
     return True, float(tol)
 
 
-def _pesos_plan(params: dict, cfg: dict) -> tuple[dict[str, float], dict[str, float]]:
-    pf, pc, _pfc = presupuestos_guardadas(params, cfg)
+def _pesos_plan(params: dict, cfg: dict) -> tuple[dict[str, float], dict[str, float], dict[tuple[str, str], float]]:
+    pf, pc, pfc = presupuestos_guardadas(params, cfg)
     total_f = sum(int(v) for v in pf.values()) or 1
     total_c = sum(int(v) for v in pc.values()) or 1
+    total_fc = sum(int(v) for row in pfc.values() for v in row.values()) or 1
     p_src = {f: int(v) / total_f for f, v in pf.items()}
     p_car = {c: int(v) / total_c for c, v in pc.items()}
-    return p_src, p_car
+    p_fc: dict[tuple[str, str], float] = {}
+    for f, row in pfc.items():
+        fk = f if f in p_src else FUENTE_INV.get(f, f)
+        for c, v in row.items():
+            p_fc[(fk, c)] = int(v) / total_fc
+    return p_src, p_car, p_fc
 
 
 def puntaje_omision(o: Oferta) -> tuple:
@@ -72,30 +80,6 @@ def _pct(n: int, total: int) -> float:
     return 100.0 * n / total if total else 0.0
 
 
-def _exceso_fuente(por_f: dict[str, int], total: int, p_src: dict[str, float], delta_pp: float) -> str | None:
-    peor: tuple[float, str] | None = None
-    for f, plan in p_src.items():
-        actual = _pct(por_f.get(f, 0), total)
-        plan_pct = plan * 100
-        if actual > plan_pct + delta_pp + 1e-9:
-            exceso = actual - (plan_pct + delta_pp)
-            if peor is None or exceso > peor[0]:
-                peor = (exceso, f)
-    return peor[1] if peor else None
-
-
-def _exceso_carrera(por_c: dict[str, int], total: int, p_car: dict[str, float], delta_pp: float) -> str | None:
-    peor: tuple[float, str] | None = None
-    for c, plan in p_car.items():
-        actual = _pct(por_c.get(c, 0), total)
-        plan_pct = plan * 100
-        if actual > plan_pct + delta_pp + 1e-9:
-            exceso = actual - (plan_pct + delta_pp)
-            if peor is None or exceso > peor[0]:
-                peor = (exceso, c)
-    return peor[1] if peor else None
-
-
 def dentro_tolerancia(
     por_f: dict[str, int],
     por_c: dict[str, int],
@@ -108,33 +92,312 @@ def dentro_tolerancia(
         return True
     for f, plan in p_src.items():
         actual = _pct(por_f.get(f, 0), total)
-        if abs(actual - plan * 100) > delta_pp + 1e-6:
+        if abs(actual - plan * 100) > delta_pp + 1e-4:
             return False
     for c, plan in p_car.items():
         actual = _pct(por_c.get(c, 0), total)
-        if abs(actual - plan * 100) > delta_pp + 1e-6:
+        if abs(actual - plan * 100) > delta_pp + 1e-4:
             return False
     return True
 
 
-def sin_sobre_representacion(
-    por_f: dict[str, int],
-    por_c: dict[str, int],
-    total: int,
+def _margen_filas(
+    celdas: list[tuple[str, str]],
     p_src: dict[str, float],
     p_car: dict[str, float],
     delta_pp: float,
+    total: int,
+    n_vars: int,
+    x_cols: slice,
+) -> tuple[list[np.ndarray], list[float], list[float]]:
+    tol = delta_pp / 100.0
+    rows: list[np.ndarray] = []
+    lb_rows: list[float] = []
+    ub_rows: list[float] = []
+
+    eq = np.zeros(n_vars)
+    for i in range(len(celdas)):
+        eq[x_cols.start + i] = 1.0
+    rows.append(eq)
+    lb_rows.append(float(total))
+    ub_rows.append(float(total))
+
+    for f in p_src:
+        row = np.zeros(n_vars)
+        for i, key in enumerate(celdas):
+            if key[0] == f:
+                row[x_cols.start + i] = 1.0
+        rows.append(row)
+        lb_rows.append((p_src[f] - tol) * total)
+        ub_rows.append((p_src[f] + tol) * total)
+
+    for c in p_car:
+        row = np.zeros(n_vars)
+        for i, key in enumerate(celdas):
+            if key[1] == c:
+                row[x_cols.start + i] = 1.0
+        rows.append(row)
+        lb_rows.append((p_car[c] - tol) * total)
+        ub_rows.append((p_car[c] + tol) * total)
+
+    return rows, lb_rows, ub_rows
+
+
+def _vector_a_conteos(x: np.ndarray, celdas: list[tuple[str, str]]) -> dict[tuple[str, str], int]:
+    return {celdas[i]: int(x[i]) for i in range(len(celdas))}
+
+
+def _milp_factible(
+    av_fc: dict[tuple[str, str], int],
+    p_src: dict[str, float],
+    p_car: dict[str, float],
+    delta_pp: float,
+    total: int,
 ) -> bool:
-    """Lo alcanzable omitiendo solo excedentes (no corrige sub-representación)."""
     if total == 0:
         return True
-    for f, plan in p_src.items():
-        if _pct(por_f.get(f, 0), total) > plan * 100 + delta_pp + 1e-6:
-            return False
-    for c, plan in p_car.items():
-        if _pct(por_c.get(c, 0), total) > plan * 100 + delta_pp + 1e-6:
-            return False
-    return True
+    celdas = sorted(av_fc.keys())
+    m = len(celdas)
+    caps = np.array([int(av_fc[k]) for k in celdas], dtype=float)
+    if total > int(caps.sum()):
+        return False
+
+    rows, lb_rows, ub_rows = _margen_filas(celdas, p_src, p_car, delta_pp, total, m, slice(0, m))
+    A = np.vstack(rows)
+    res = milp(
+        c=-np.ones(m),
+        integrality=np.ones(m, dtype=int),
+        bounds=Bounds(np.zeros(m), caps),
+        constraints=LinearConstraint(A, np.array(lb_rows), np.array(ub_rows)),
+    )
+    if not res.success or res.x is None:
+        return False
+    x = np.round(res.x).astype(int)
+    x = np.clip(x, 0, caps.astype(int))
+    if int(x.sum()) != total:
+        return False
+    counts = _vector_a_conteos(x, celdas)
+    por_f: dict[str, int] = defaultdict(int)
+    por_c: dict[str, int] = defaultdict(int)
+    for (s, c), n in counts.items():
+        por_f[s] += n
+        por_c[c] += n
+    return dentro_tolerancia(por_f, por_c, total, p_src, p_car, delta_pp)
+
+
+def _milp_asignar(
+    av_fc: dict[tuple[str, str], int],
+    p_src: dict[str, float],
+    p_car: dict[str, float],
+    delta_pp: float,
+    total: int,
+    p_fc: dict[tuple[str, str], float] | None,
+) -> dict[tuple[str, str], int] | None:
+    celdas = sorted(av_fc.keys())
+    m = len(celdas)
+    caps = np.array([int(av_fc[k]) for k in celdas], dtype=int)
+    if total == 0:
+        return {k: 0 for k in celdas}
+
+    targets = np.array(
+        [
+            (p_fc.get(k, p_src[k[0]] * p_car[k[1]]) if p_fc else p_src[k[0]] * p_car[k[1]]) * total
+            for k in celdas
+        ],
+        dtype=float,
+    )
+
+    n_slack = 2 * m
+    n_vars = m + n_slack
+    x_slice = slice(0, m)
+
+    rows, lb_rows, ub_rows = _margen_filas(celdas, p_src, p_car, delta_pp, total, n_vars, x_slice)
+    for i in range(m):
+        row = np.zeros(n_vars)
+        row[i] = 1.0
+        row[m + i] = -1.0
+        row[m + m + i] = 1.0
+        rows.append(row)
+        lb_rows.append(float(targets[i]))
+        ub_rows.append(float(targets[i]))
+
+    A = np.vstack(rows)
+    c_obj = np.zeros(n_vars)
+    c_obj[m:] = 1.0
+    integrality = np.ones(n_vars, dtype=int)
+    integrality[m:] = 0
+
+    res = milp(
+        c=c_obj,
+        integrality=integrality,
+        bounds=Bounds(
+            np.concatenate([np.zeros(m), np.zeros(n_slack)]),
+            np.concatenate([caps.astype(float), np.full(n_slack, np.inf)]),
+        ),
+        constraints=LinearConstraint(A, np.array(lb_rows), np.array(ub_rows)),
+    )
+    if not res.success or res.x is None:
+        return _milp_asignar_simple(av_fc, p_src, p_car, delta_pp, total)
+
+    x = np.floor(res.x[:m] + 1e-6).astype(int)
+    x = np.clip(x, 0, caps)
+    x = _reparar_suma_entera(x, caps, celdas, p_src, p_car, delta_pp, total, p_fc)
+    if x is None:
+        return _milp_asignar_simple(av_fc, p_src, p_car, delta_pp, total)
+    return _vector_a_conteos(x, celdas)
+
+
+def _milp_asignar_simple(
+    av_fc: dict[tuple[str, str], int],
+    p_src: dict[str, float],
+    p_car: dict[str, float],
+    delta_pp: float,
+    total: int,
+) -> dict[tuple[str, str], int] | None:
+    celdas = sorted(av_fc.keys())
+    m = len(celdas)
+    caps = np.array([int(av_fc[k]) for k in celdas], dtype=float)
+    rows, lb_rows, ub_rows = _margen_filas(celdas, p_src, p_car, delta_pp, total, m, slice(0, m))
+    A = np.vstack(rows)
+    res = milp(
+        c=-np.ones(m),
+        integrality=np.ones(m, dtype=int),
+        bounds=Bounds(np.zeros(m), caps),
+        constraints=LinearConstraint(A, np.array(lb_rows), np.array(ub_rows)),
+    )
+    if not res.success or res.x is None:
+        return None
+    x = np.round(res.x).astype(int)
+    x = np.clip(x, 0, caps.astype(int))
+    if int(x.sum()) != total:
+        x = _reparar_suma_entera(x, caps.astype(int), celdas, p_src, p_car, delta_pp, total, None)
+        if x is None:
+            return None
+    counts = _vector_a_conteos(x, celdas)
+    por_f: dict[str, int] = defaultdict(int)
+    por_c: dict[str, int] = defaultdict(int)
+    for (s, c), n in counts.items():
+        por_f[s] += n
+        por_c[c] += n
+    if not dentro_tolerancia(por_f, por_c, total, p_src, p_car, delta_pp):
+        return None
+    return counts
+
+
+def _reparar_suma_entera(
+    x: np.ndarray,
+    caps: np.ndarray,
+    celdas: list[tuple[str, str]],
+    p_src: dict[str, float],
+    p_car: dict[str, float],
+    delta_pp: float,
+    objetivo: int,
+    p_fc: dict[tuple[str, str], float] | None,
+) -> np.ndarray | None:
+    x = x.copy()
+    diff = objetivo - int(x.sum())
+    targets = None
+    if p_fc:
+        targets = {celdas[i]: p_fc.get(celdas[i], 0) * objetivo for i in range(len(celdas))}
+
+    def viable(vec: np.ndarray) -> bool:
+        counts = _vector_a_conteos(vec, celdas)
+        por_f: dict[str, int] = defaultdict(int)
+        por_c: dict[str, int] = defaultdict(int)
+        for (s, c), n in counts.items():
+            por_f[s] += n
+            por_c[c] += n
+        return dentro_tolerancia(por_f, por_c, objetivo, p_src, p_car, delta_pp)
+
+    guard = 0
+    while diff != 0 and guard < 100000:
+        guard += 1
+        if diff < 0:
+            candidatos = [i for i in range(len(celdas)) if x[i] > 0]
+            if not candidatos:
+                return None
+            if targets:
+                i = max(candidatos, key=lambda j: (x[j] - targets.get(celdas[j], 0), x[j]))
+            else:
+                i = max(candidatos, key=lambda j: x[j])
+            x[i] -= 1
+            diff += 1
+        else:
+            candidatos = [i for i in range(len(celdas)) if x[i] < caps[i]]
+            if not candidatos:
+                return None
+            if targets:
+                i = max(candidatos, key=lambda j: (targets.get(celdas[j], 0) - x[j], -j))
+            else:
+                i = max(candidatos, key=lambda j: (caps[j] - x[j]))
+            x[i] += 1
+            diff -= 1
+    if int(x.sum()) != objetivo or not viable(x):
+        return None
+    return x
+
+
+def resolver_conteos_celdas(
+    av_fc: dict[tuple[str, str], int],
+    p_src: dict[str, float],
+    p_car: dict[str, float],
+    delta_pp: float,
+    p_fc: dict[tuple[str, str], float] | None = None,
+) -> dict[tuple[str, str], int]:
+    max_cap = sum(av_fc.values())
+    if max_cap == 0:
+        return {}
+
+    lo, hi = 0, max_cap
+    mejor_t = 0
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if _milp_factible(av_fc, p_src, p_car, delta_pp, mid):
+            mejor_t = mid
+            lo = mid + 1
+        else:
+            hi = mid - 1
+
+    if mejor_t == 0:
+        return {k: 0 for k in av_fc}
+
+    sol = _milp_asignar(av_fc, p_src, p_car, delta_pp, mejor_t, p_fc)
+    if sol is not None:
+        return sol
+
+    sol = _milp_asignar_simple(av_fc, p_src, p_car, delta_pp, mejor_t)
+    if sol is not None:
+        return sol
+
+    return _mejor_esfuerzo_desviacion(av_fc, p_src, p_car, p_fc)
+
+
+def _mejor_esfuerzo_desviacion(
+    av_fc: dict[tuple[str, str], int],
+    p_src: dict[str, float],
+    p_car: dict[str, float],
+    p_fc: dict[tuple[str, str], float] | None,
+) -> dict[tuple[str, str], int]:
+    max_cap = sum(av_fc.values())
+    mejor: tuple[float, int, dict[tuple[str, str], int]] | None = None
+    for t in range(max_cap, 0, -1):
+        sol = _milp_asignar_simple(av_fc, p_src, p_car, 100.0, t)
+        if sol is None:
+            continue
+        por_f: dict[str, int] = defaultdict(int)
+        por_c: dict[str, int] = defaultdict(int)
+        for (s, c), n in sol.items():
+            por_f[s] += n
+            por_c[c] += n
+        dev = 0.0
+        for f, plan in p_src.items():
+            dev = max(dev, abs(_pct(por_f.get(f, 0), t) - plan * 100))
+        for c, plan in p_car.items():
+            dev = max(dev, abs(_pct(por_c.get(c, 0), t) - plan * 100))
+        cand = (dev, -t, sol)
+        if mejor is None or cand < mejor:
+            mejor = cand
+    return mejor[2] if mejor else {k: 0 for k in av_fc}
 
 
 def seleccionar_por_omision(
@@ -142,69 +405,26 @@ def seleccionar_por_omision(
     p_src: dict[str, float],
     p_car: dict[str, float],
     delta_pp: float,
+    p_fc: dict[tuple[str, str], float] | None = None,
 ) -> set[str]:
-    """Omite ofertas de celdas sobre-representadas hasta no queden excedentes por fuente/carrera."""
     if not scored:
         return set()
 
-    def _ids(items: list[OfertaScored]) -> set[str]:
-        return {s.oferta.id_oferta for s in items}
+    por_celda: dict[tuple[str, str], list[OfertaScored]] = defaultdict(list)
+    for s in scored:
+        por_celda[(s.fuente_key, s.carrera)].append(s)
+    for items in por_celda.values():
+        items.sort(key=lambda x: x.score_sort)
 
-    pool = list(scored)
-    mejor_ids: set[str] | None = None
-    mejor_n = 0
+    av_fc = {k: len(v) for k, v in por_celda.items()}
+    objetivos = resolver_conteos_celdas(av_fc, p_src, p_car, delta_pp, p_fc)
 
-    while len(pool) > 0:
-        por_f, por_c = _contadores(pool)
-        total = len(pool)
-        if sin_sobre_representacion(por_f, por_c, total, p_src, p_car, delta_pp):
-            if total > mejor_n:
-                mejor_n = total
-                mejor_ids = _ids(pool)
-            break
-        f_ex = _exceso_fuente(por_f, total, p_src, delta_pp)
-        c_ex = _exceso_carrera(por_c, total, p_car, delta_pp)
-        if f_ex is None and c_ex is None:
-            break
-        if f_ex is None:
-            objetivo_f = False
-            objetivo = c_ex
-        elif c_ex is None:
-            objetivo_f = True
-            objetivo = f_ex
-        elif _rank_exceso_f(por_f, total, p_src, delta_pp, f_ex) >= _rank_exceso_c(
-            por_c, total, p_car, delta_pp, c_ex
-        ):
-            objetivo_f = True
-            objetivo = f_ex
-        else:
-            objetivo_f = False
-            objetivo = c_ex
-        candidatos = (
-            [s for s in pool if s.fuente_key == objetivo]
-            if objetivo_f
-            else [s for s in pool if s.carrera == objetivo]
-        )
-        if not candidatos:
-            break
-        elim = min(candidatos, key=lambda s: s.score_sort)
-        pool.remove(elim)
-
-    if mejor_ids is not None:
-        return mejor_ids
-    if len(pool) > 0:
-        por_f, por_c = _contadores(pool)
-        if sin_sobre_representacion(por_f, por_c, len(pool), p_src, p_car, delta_pp):
-            return _ids(pool)
-    return set()
-
-
-def _rank_exceso_f(por_f, total, p_src, delta, f):
-    return _pct(por_f.get(f, 0), total) - (p_src[f] * 100 + delta)
-
-
-def _rank_exceso_c(por_c, total, p_car, delta, c):
-    return _pct(por_c.get(c, 0), total) - (p_car[c] * 100 + delta)
+    keep: set[str] = set()
+    for key, items in por_celda.items():
+        n = objetivos.get(key, 0)
+        for s in items[:n]:
+            keep.add(s.oferta.id_oferta)
+    return keep
 
 
 def _score_ofertas(ofertas: Iterable[Oferta]) -> list[OfertaScored]:
@@ -224,21 +444,9 @@ def max_total_factible(
     p_src: dict[str, float],
     p_car: dict[str, float],
     delta_pp: float,
+    p_fc: dict[tuple[str, str], float] | None = None,
 ) -> int:
-    """Máximo N tal que existe subconjunto con conteos por celda ≤ av y márgenes en tolerancia."""
-    items: list[OfertaScored] = []
-    for (f, c), n in av_fc.items():
-        for i in range(n):
-            stub = Oferta(
-                id_oferta=f"{f}-{c}-{i}",
-                fuente=NOMBRES_FUENTE.get(f, f),
-                carrera_principal=c,
-                clasificado_por="reglas",
-                descripcion="x" * (10 + i),
-            )
-            items.append(OfertaScored(stub, f, c, (0, len(stub.descripcion or ""), i, stub.id_oferta)))
-    kept = seleccionar_por_omision(items, p_src, p_car, delta_pp)
-    return len(kept)
+    return sum(resolver_conteos_celdas(av_fc, p_src, p_car, delta_pp, p_fc).values())
 
 
 def factible_total(
@@ -271,9 +479,9 @@ def recomputar_ajuste_proporcion(s: Session, ejec: Ejecucion, cfg: dict) -> dict
     if not activas:
         return {"aplicado": False, "motivo": "sin_ofertas"}
 
-    p_src, p_car = _pesos_plan(params, cfg)
+    p_src, p_car, p_fc = _pesos_plan(params, cfg)
     scored = _score_ofertas(activas)
-    keep = seleccionar_por_omision(scored, p_src, p_car, delta_pp)
+    keep = seleccionar_por_omision(scored, p_src, p_car, delta_pp, p_fc)
 
     omitidas_por_celda: dict[str, int] = {}
     total_omit = 0
