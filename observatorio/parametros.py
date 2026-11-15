@@ -58,6 +58,19 @@ POR_DEFECTO: dict[str, dict[str, Any]] = {
         "valor": {"habilitada": True, "max_minutos": 240, "fuentes": ["linkedin", "indeed", "computrabajo"]},
         "descripcion": "Si no se llega a la meta, se hace una mini corrida con los términos 'ampliado'.",
     },
+    "factor_extraccion_crudas": {
+        "valor": 1.4,
+        "descripcion": "Multiplicador del presupuesto de crudas vs. metas de ofertas guardadas (conversiones bajas).",
+    },
+    "ronda_extra_cupos": {
+        "valor": {
+            "habilitada": True,
+            "max_rondas": 2,
+            "consultas_por_celda": 8,
+            "max_minutos_fuente": 60,
+        },
+        "descripcion": "Tras consolidar, si faltan guardadas en alguna celda fuente×carrera, lanza consultas extra enfocadas.",
+    },
     "dedup": {
         "valor": {"alcance": "global", "dias": 7},
         "descripcion": "Duplicados (RF-08): misma empresa + cargo + ciudad con fechas a menos de N días. alcance=global compara contra todo el historial; alcance=corte solo dentro del mismo semestre y corte.",

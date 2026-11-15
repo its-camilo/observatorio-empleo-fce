@@ -117,6 +117,10 @@ mín(palabras débiles, 3) + 1 si el término de búsqueda es de esa carrera (`c
 
 El reporte de ejecución muestra cuántas ofertas dudosas resolvió la regla de respaldo (`uso_llm.dudosas_respaldo`).
 
+### Cupos finales (guardadas)
+
+Al preparar se congelan dos presupuestos: **guardadas** (meta `meta_ofertas`) y **extracción** (crudas escaladas con `factor_extraccion_crudas`, default 1.4). En consolidación, `ControlCuposGuardadas` impide guardar más ofertas de las previstas por celda fuente×carrera, fuente y carrera; el exceso se cuenta como `excedente_cupo` (no entra en `ofertas`). Si faltan celdas, `errores_detalle` lista meta vs guardadas finales; puede haber rondas extra (`ronda_extra_cupos`) con consultas focalizadas.
+
 ### Duplicados (RF-08)
 Clave = empresa normalizada (sin S.A.S., Ltda, Colombia…) | cargo normalizado (sin marcas de género) | ciudad normalizada.
 Duplicado si la clave coincide y las fechas difieren < 7 días (o falta alguna). Gana la descripción más larga; se unen los
