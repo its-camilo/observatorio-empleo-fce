@@ -110,6 +110,16 @@ def ranking(semestre: str, corte: str, carrera: str | None = None, _: Usuario = 
             "grupos": analisis.ranking_por_grupo(s, semestre, normalizar_corte(corte), carrera)}
 
 
+@router.get("/analisis/ranking-habilidades")
+def ranking_habilidades(semestre: str, corte: str, carrera: str | None = None, _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
+    return {"ranking": analisis.ranking_habilidades(s, semestre, normalizar_corte(corte), carrera)}
+
+
+@router.get("/analisis/ranking-idiomas")
+def ranking_idiomas(semestre: str, corte: str, carrera: str | None = None, _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
+    return {"ranking": analisis.ranking_idiomas(s, semestre, normalizar_corte(corte), carrera)}
+
+
 @router.get("/analisis/comparar")
 def comparar(semestre_a: str, corte_a: str, semestre_b: str, corte_b: str, carrera: str | None = None,
              _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
@@ -187,7 +197,17 @@ def csv_publico(tabla: str, semestre: str | None = None, corte: str | None = Non
     esperado = ajustes().csv_token
     if esperado and token != esperado:
         raise HTTPException(401, "Token de CSV no válido")
-    if tabla not in ("ofertas", "oferta_software", "oferta_carrera", "catalogo", "ejecuciones", "cursos", "temas_recomendados"):
+    if tabla not in (
+        "ofertas",
+        "oferta_software",
+        "oferta_carrera",
+        "oferta_habilidades",
+        "oferta_idiomas",
+        "catalogo",
+        "ejecuciones",
+        "cursos",
+        "temas_recomendados",
+    ):
         raise HTTPException(404, "Tabla no disponible")
     from observatorio.exportar import a_csv, filas
 

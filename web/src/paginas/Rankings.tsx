@@ -4,6 +4,7 @@ import { Aviso, Barras, Cargando, SelectorCorte, Titulo, useDatos } from "../com
 
 type Corte = { semestre: string; corte: string; ofertas: number };
 type Fila = { posicion: number; software: string; grupo: string; ofertas: number; porcentaje: number; variacion_pp?: number | null; corte_anterior?: string; total_ofertas_carrera: number };
+type FilaGc = { posicion: number; habilidad?: string; idioma?: string; ofertas: number; porcentaje: number; total_ofertas_carrera: number };
 type Comparacion = {
   corte_a: { semestre: string; corte: string; total_ofertas: number; fuentes: string[] };
   corte_b: { semestre: string; corte: string; total_ofertas: number; fuentes: string[] };
@@ -31,6 +32,10 @@ export default function Rankings() {
   const [sem, cor] = sel.split("|");
   const { datos: rk } = useDatos<{ ranking: Fila[]; grupos: { grupo: string; menciones: number }[] }>(
     sel ? `/analisis/ranking${qs({ semestre: sem, corte: cor, carrera })}` : null, [sel, carrera]);
+  const { datos: rkHab } = useDatos<{ ranking: FilaGc[] }>(
+    sel ? `/analisis/ranking-habilidades${qs({ semestre: sem, corte: cor, carrera })}` : null, [sel, carrera]);
+  const { datos: rkIdi } = useDatos<{ ranking: FilaGc[] }>(
+    sel ? `/analisis/ranking-idiomas${qs({ semestre: sem, corte: cor, carrera })}` : null, [sel, carrera]);
   const [sa, ca] = a.split("|");
   const [sb, cb] = b.split("|");
   const { datos: cmp } = useDatos<Comparacion>(a && b ? `/analisis/comparar${qs({ semestre_a: sa, corte_a: ca, semestre_b: sb, corte_b: cb, carrera })}` : null, [a, b, carrera]);
@@ -66,6 +71,32 @@ export default function Rankings() {
             <Barras datos={rk.grupos.map((g) => ({ etiqueta: g.grupo, valor: g.menciones }))} /></div>
         </div>
       )}
+      {(rkHab?.ranking?.length || rkIdi?.ranking?.length) ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {rkHab && (
+            <div className="tarjeta overflow-x-auto">
+              <h2 className="mb-2 font-semibold">Habilidades blandas (RF-18)</h2>
+              <table className="tabla">
+                <thead><tr><th>#</th><th>Habilidad</th><th>Ofertas</th><th>%</th></tr></thead>
+                <tbody>{rkHab.ranking.slice(0, 15).map((r) => (
+                  <tr key={r.habilidad}><td>{r.posicion}</td><td>{r.habilidad}</td><td>{r.ofertas}</td><td>{r.porcentaje.toFixed(1)} %</td></tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+          {rkIdi && (
+            <div className="tarjeta overflow-x-auto">
+              <h2 className="mb-2 font-semibold">Idiomas (RF-18)</h2>
+              <table className="tabla">
+                <thead><tr><th>#</th><th>Idioma</th><th>Ofertas</th><th>%</th></tr></thead>
+                <tbody>{rkIdi.ranking.slice(0, 15).map((r) => (
+                  <tr key={r.idioma}><td>{r.posicion}</td><td>{r.idioma}</td><td>{r.ofertas}</td><td>{r.porcentaje.toFixed(1)} %</td></tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : null}
       <div className="tarjeta overflow-x-auto">
         <h2 className="mb-2 font-semibold">Comparación entre cortes</h2>
         <div className="mb-3 flex flex-wrap items-end gap-3">

@@ -15,6 +15,7 @@ const Rankings = lazy(() => import("./paginas/Rankings"));
 const Catalogo = lazy(() => import("./paginas/Catalogo"));
 const Terminos = lazy(() => import("./paginas/Terminos"));
 const NoCatalogados = lazy(() => import("./paginas/NoCatalogados"));
+const CatalogoGc = lazy(() => import("./paginas/CatalogoGc"));
 const Validacion = lazy(() => import("./paginas/Validacion"));
 const Usuarios = lazy(() => import("./paginas/Usuarios"));
 const Cursos = lazy(() => import("./paginas/Cursos"));
@@ -36,6 +37,7 @@ const MENU: { a: string; texto: string; admin?: boolean }[] = [
   { a: "/catalogo", texto: "Catálogo y sinónimos" },
   { a: "/terminos", texto: "Términos de búsqueda" },
   { a: "/no-catalogados", texto: "No catalogados" },
+  { a: "/catalogo-gc", texto: "Habilidades e idiomas", admin: true },
   { a: "/validacion", texto: "Validación" },
   { a: "/cursos", texto: "Cursos en tendencia" },
   { a: "/temas-recomendados", texto: "Temas para dictar" },
@@ -158,6 +160,7 @@ function App() {
             <Route path="/catalogo" element={<Catalogo />} />
             <Route path="/terminos" element={<Terminos />} />
             <Route path="/no-catalogados" element={<NoCatalogados />} />
+            <Route path="/catalogo-gc" element={<SoloAdmin><CatalogoGc /></SoloAdmin>} />
             <Route path="/validacion" element={<Validacion />} />
             <Route path="/cursos" element={<Cursos />} />
             <Route path="/temas-recomendados" element={<TemasRecomendados />} />

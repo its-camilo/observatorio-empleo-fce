@@ -27,11 +27,11 @@ import sys
 ACCIONES = (
     "completa", "preparar", "extraer", "extraer-fuente", "extraer-secuencial", "cursos", "consolidar", "reporte",
     "exportar", "migrar", "semilla", "purga-operativa", "purga-reglas", "cerrar-corrida", "cerrar-colgadas",
-    "ajustar-proporciones",
+    "ajustar-proporciones", "backfill-habilidades",
 )
 
 # Comandos de mantenimiento / export que no requieren id de ejecución de corrida.
-ACCIONES_SIN_RUN_ID = frozenset({"exportar", "purga-operativa", "purga-reglas", "cerrar-colgadas"})
+ACCIONES_SIN_RUN_ID = frozenset({"exportar", "purga-operativa", "purga-reglas", "cerrar-colgadas", "backfill-habilidades"})
 
 
 def configurar_logs() -> None:
@@ -126,6 +126,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--conclusion", help="Conclusión de GitHub (failure, cancelled, timed_out)")
     p.add_argument("--ids", help="Ids de ejecución separados por comas (cerrar-colgadas)")
     p.add_argument("--forzar", action="store_true", help="Con cerrar-colgadas: cierra los --ids sin esperar umbral de horas")
+    p.add_argument("--limite", type=int, help="Máximo de ofertas (backfill-habilidades)")
     a = p.parse_args(argv)
 
     if a.accion == "migrar":
@@ -267,6 +268,14 @@ def main(argv: list[str] | None = None) -> int:
             with open(a.salida, "wb") as f:
                 f.write(a_excel(s, sem, cor))
             print(f"Archivo guardado: {a.salida}")
+            return 0
+        if a.accion == "backfill-habilidades":
+            from observatorio.pipeline.backfill_habilidades import backfill_habilidades_idiomas
+
+            sem = orq.normalizar_semestre(a.semestre) if a.semestre else None
+            cor = orq.normalizar_corte(a.corte) if a.corte else None
+            print(json.dumps(backfill_habilidades_idiomas(s, sem, cor, a.limite), ensure_ascii=False))
+            s.commit()
             return 0
         if a.accion in ("purga-operativa", "purga-reglas"):
             from sqlalchemy import func, select

@@ -1,14 +1,25 @@
 """Catálogo y sinónimos, términos de búsqueda, no catalogados y parámetros (RF-01, RF-05, RF-17)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from observatorio.api.seguridad import get_db, solo_admin, usuario_actual
-from observatorio.db.modelos import Catalogo, Config, NoCatalogado, Sinonimo, TerminoBusqueda, Usuario
+from observatorio.db.modelos import (
+    Catalogo,
+    CatalogoHabilidad,
+    CatalogoIdioma,
+    Config,
+    NoCatalogado,
+    Sinonimo,
+    SinonimoHabilidad,
+    SinonimoIdioma,
+    TerminoBusqueda,
+    Usuario,
+)
 from observatorio.distribucion import FUENTES_EXTRACCION, normalizar_porcentajes, validar_distribucion
 from observatorio.parametros import POR_DEFECTO, leer_config
 router = APIRouter()
@@ -238,6 +249,89 @@ def decidir_nc(nid: int, d: DecisionNc, _: Usuario = Depends(solo_admin), s: Ses
             c.sinonimos.append(Sinonimo(texto=x.termino_original))
     x.estado = d.estado
     return _nc(x)
+
+
+# ----------------------------------------------------------------- catálogo habilidades / idiomas (RF-18)
+class ItemCatalogoGcIn(BaseModel):
+    nombre: str
+    activo: bool = True
+    sinonimos: list[str] | None = None
+
+
+def _hab(c: CatalogoHabilidad) -> dict:
+    return {"id": c.id, "nombre": c.nombre, "activo": c.activo, "sinonimos": [x.texto for x in c.sinonimos]}
+
+
+def _idi(c: CatalogoIdioma) -> dict:
+    return {"id": c.id, "nombre": c.nombre, "activo": c.activo, "sinonimos": [x.texto for x in c.sinonimos]}
+
+
+@router.get("/catalogo-habilidades")
+def listar_hab(_: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
+    return [_hab(c) for c in s.scalars(select(CatalogoHabilidad).order_by(CatalogoHabilidad.nombre))]
+
+
+@router.post("/catalogo-habilidades")
+def crear_hab(d: ItemCatalogoGcIn, _: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
+    c = CatalogoHabilidad(nombre=d.nombre.strip(), activo=d.activo)
+    for t in d.sinonimos or []:
+        c.sinonimos.append(SinonimoHabilidad(texto=t.strip()))
+    s.add(c)
+    s.flush()
+    return _hab(c)
+
+
+@router.put("/catalogo-habilidades/{hid}")
+def editar_hab(hid: int, d: ItemCatalogoGcIn, _: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
+    c = s.get(CatalogoHabilidad, hid)
+    if c is None:
+        raise HTTPException(404, "Habilidad no encontrada")
+    c.nombre, c.activo = d.nombre.strip(), d.activo
+    return _hab(c)
+
+
+@router.post("/catalogo-habilidades/{hid}/sinonimos")
+def agregar_sin_hab(hid: int, texto: str = Query(...), _: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
+    c = s.get(CatalogoHabilidad, hid)
+    if c is None:
+        raise HTTPException(404, "Habilidad no encontrada")
+    s.add(SinonimoHabilidad(catalogo_habilidad_id=hid, texto=texto.strip()))
+    s.flush()
+    return _hab(c)
+
+
+@router.get("/catalogo-idiomas")
+def listar_idi(_: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
+    return [_idi(c) for c in s.scalars(select(CatalogoIdioma).order_by(CatalogoIdioma.nombre))]
+
+
+@router.post("/catalogo-idiomas")
+def crear_idi(d: ItemCatalogoGcIn, _: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
+    c = CatalogoIdioma(nombre=d.nombre.strip(), activo=d.activo)
+    for t in d.sinonimos or []:
+        c.sinonimos.append(SinonimoIdioma(texto=t.strip()))
+    s.add(c)
+    s.flush()
+    return _idi(c)
+
+
+@router.put("/catalogo-idiomas/{iid}")
+def editar_idi(iid: int, d: ItemCatalogoGcIn, _: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
+    c = s.get(CatalogoIdioma, iid)
+    if c is None:
+        raise HTTPException(404, "Idioma no encontrado")
+    c.nombre, c.activo = d.nombre.strip(), d.activo
+    return _idi(c)
+
+
+@router.post("/catalogo-idiomas/{iid}/sinonimos")
+def agregar_sin_idi(iid: int, texto: str = Query(...), _: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
+    c = s.get(CatalogoIdioma, iid)
+    if c is None:
+        raise HTTPException(404, "Idioma no encontrado")
+    s.add(SinonimoIdioma(catalogo_idioma_id=iid, texto=texto.strip()))
+    s.flush()
+    return _idi(c)
 
 
 # ----------------------------------------------------------------- parámetros

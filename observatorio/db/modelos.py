@@ -101,6 +101,10 @@ class Oferta(Base):
 
     softwares: Mapped[list["OfertaSoftware"]] = relationship(
         back_populates="oferta", cascade="all, delete-orphan", passive_deletes=True)
+    habilidades: Mapped[list["OfertaHabilidad"]] = relationship(
+        back_populates="oferta", cascade="all, delete-orphan", passive_deletes=True)
+    idiomas_detectados: Mapped[list["OfertaIdioma"]] = relationship(
+        back_populates="oferta", cascade="all, delete-orphan", passive_deletes=True)
 
 
 class OfertaSoftware(Base):
@@ -217,6 +221,82 @@ class NoCatalogado(Base):
     corte: Mapped[str | None] = mapped_column(String(16))
     primera_vez: Mapped[datetime] = mapped_column(DateTime, default=ahora)
     ultima_vez: Mapped[datetime] = mapped_column(DateTime, default=ahora)
+
+
+class CatalogoHabilidad(Base):
+    __tablename__ = "catalogo_habilidades"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    nombre: Mapped[str] = mapped_column(String(120), unique=True)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    actualizado_en: Mapped[datetime] = mapped_column(DateTime, default=ahora, onupdate=ahora)
+
+    sinonimos: Mapped[list["SinonimoHabilidad"]] = relationship(
+        back_populates="catalogo", cascade="all, delete-orphan", passive_deletes=True, order_by="SinonimoHabilidad.id")
+
+
+class SinonimoHabilidad(Base):
+    __tablename__ = "sinonimos_habilidad"
+    __table_args__ = (UniqueConstraint("catalogo_habilidad_id", "texto", name="uq_sinonimo_habilidad"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    catalogo_habilidad_id: Mapped[int] = mapped_column(ForeignKey("catalogo_habilidades.id", ondelete="CASCADE"), index=True)
+    texto: Mapped[str] = mapped_column(String(160))
+
+    catalogo: Mapped[CatalogoHabilidad] = relationship(back_populates="sinonimos")
+
+
+class CatalogoIdioma(Base):
+    __tablename__ = "catalogo_idiomas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    nombre: Mapped[str] = mapped_column(String(80), unique=True)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    actualizado_en: Mapped[datetime] = mapped_column(DateTime, default=ahora, onupdate=ahora)
+
+    sinonimos: Mapped[list["SinonimoIdioma"]] = relationship(
+        back_populates="catalogo", cascade="all, delete-orphan", passive_deletes=True, order_by="SinonimoIdioma.id")
+
+
+class SinonimoIdioma(Base):
+    __tablename__ = "sinonimos_idioma"
+    __table_args__ = (UniqueConstraint("catalogo_idioma_id", "texto", name="uq_sinonimo_idioma"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    catalogo_idioma_id: Mapped[int] = mapped_column(ForeignKey("catalogo_idiomas.id", ondelete="CASCADE"), index=True)
+    texto: Mapped[str] = mapped_column(String(160))
+
+    catalogo: Mapped[CatalogoIdioma] = relationship(back_populates="sinonimos")
+
+
+class OfertaHabilidad(Base):
+    __tablename__ = "oferta_habilidades"
+    __table_args__ = (UniqueConstraint("id_oferta", "habilidad", name="uq_oferta_habilidad"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id_oferta: Mapped[str] = mapped_column(String(120), ForeignKey("ofertas.id_oferta", ondelete="CASCADE"), index=True)
+    habilidad: Mapped[str] = mapped_column(String(120), index=True)
+    texto_encontrado: Mapped[str | None] = mapped_column(String(255))
+    carrera: Mapped[str | None] = mapped_column(String(255))
+    semestre: Mapped[str] = mapped_column(String(16), index=True)
+    corte: Mapped[str] = mapped_column(String(16), index=True)
+
+    oferta: Mapped[Oferta] = relationship(back_populates="habilidades")
+
+
+class OfertaIdioma(Base):
+    __tablename__ = "oferta_idiomas"
+    __table_args__ = (UniqueConstraint("id_oferta", "idioma", name="uq_oferta_idioma"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id_oferta: Mapped[str] = mapped_column(String(120), ForeignKey("ofertas.id_oferta", ondelete="CASCADE"), index=True)
+    idioma: Mapped[str] = mapped_column(String(80), index=True)
+    nivel: Mapped[str | None] = mapped_column(String(40))
+    carrera: Mapped[str | None] = mapped_column(String(255))
+    semestre: Mapped[str] = mapped_column(String(16), index=True)
+    corte: Mapped[str] = mapped_column(String(16), index=True)
+
+    oferta: Mapped[Oferta] = relationship(back_populates="idiomas_detectados")
 
 
 class Curso(Base):

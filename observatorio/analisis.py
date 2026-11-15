@@ -10,7 +10,7 @@ from collections import Counter, defaultdict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from observatorio.db.modelos import Ejecucion, Oferta, OfertaSoftware
+from observatorio.db.modelos import Ejecucion, Oferta, OfertaHabilidad, OfertaIdioma, OfertaSoftware
 from observatorio.filtro_ofertas import oferta_incluida_en_resultados
 
 ORDEN_CORTE = {"Inicio": 1, "Mitad": 2, "Final": 3}
@@ -234,4 +234,69 @@ def resumen_corte(s: Session, semestre: str, corte: str, *, para_dashboard: bool
     if not para_dashboard:
         salida["por_ciudad"] = dict(list(agrupar(Oferta.ciudad).items())[:15])
         salida["por_nivel"] = agrupar(Oferta.nivel_experiencia)
+    return salida
+
+
+def _conteo_relacional(
+    s: Session,
+    semestre: str,
+    corte: str,
+    modelo,
+    campo: str,
+) -> dict[str, Counter]:
+    conteo: dict[str, Counter] = defaultdict(Counter)
+    q = select(getattr(modelo, campo), modelo.carrera).where(modelo.semestre == semestre, modelo.corte == corte)
+    for valor, carrera in s.execute(q):
+        if not valor:
+            continue
+        conteo["Todas"][valor] += 1
+        for x in (carrera or "").split("; "):
+            if x:
+                conteo[x][valor] += 1
+    return conteo
+
+
+def ranking_habilidades(s: Session, semestre: str, corte: str, carrera: str | None = None) -> list[dict]:
+    carrera = carrera or "Todas"
+    totales = _ofertas_por_carrera(s, semestre, corte)
+    conteo = _conteo_relacional(s, semestre, corte, OfertaHabilidad, "habilidad")
+    total = totales.get(carrera, 0)
+    salida = []
+    for i, (hab, n) in enumerate(conteo.get(carrera, Counter()).most_common(), 1):
+        pct = round(100 * n / total, 2) if total else 0.0
+        salida.append(
+            {
+                "posicion": i,
+                "habilidad": hab,
+                "ofertas": n,
+                "porcentaje": pct,
+                "carrera": carrera,
+                "semestre": semestre,
+                "corte": corte,
+                "total_ofertas_carrera": total,
+            }
+        )
+    return salida
+
+
+def ranking_idiomas(s: Session, semestre: str, corte: str, carrera: str | None = None) -> list[dict]:
+    carrera = carrera or "Todas"
+    totales = _ofertas_por_carrera(s, semestre, corte)
+    conteo = _conteo_relacional(s, semestre, corte, OfertaIdioma, "idioma")
+    total = totales.get(carrera, 0)
+    salida = []
+    for i, (idioma, n) in enumerate(conteo.get(carrera, Counter()).most_common(), 1):
+        pct = round(100 * n / total, 2) if total else 0.0
+        salida.append(
+            {
+                "posicion": i,
+                "idioma": idioma,
+                "ofertas": n,
+                "porcentaje": pct,
+                "carrera": carrera,
+                "semestre": semestre,
+                "corte": corte,
+                "total_ofertas_carrera": total,
+            }
+        )
     return salida
