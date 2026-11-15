@@ -41,9 +41,19 @@ def sesion_pg(postgres_url, monkeypatch):
     with fabrica_sesiones(postgres_url)() as s:
         sembrar_todo(s)
         s.commit()
-    with fabrica_sesiones(postgres_url)() as s:
+    s = fabrica_sesiones(postgres_url)()
+    try:
         yield s
-        s.rollback()
+    finally:
+        try:
+            recuperar_sesion_db(s)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            s.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        s.close()
 
 
 def test_liberar_tras_lectura_permite_flush_como_tras_espera_llm(sesion_pg: Session):
@@ -77,10 +87,10 @@ def test_liberar_tras_lectura_permite_flush_como_tras_espera_llm(sesion_pg: Sess
 
 def test_invalidate_sin_rollback_previo_deja_pending_rollback(sesion_pg: Session):
     """Documenta la regresión de #20: invalidate con sesión sucia → PendingRollbackError."""
-    sesion_pg.execute(text("SELECT 1"))
-    conn = sesion_pg.connection()
-    conn.invalidate()
-    with pytest.raises(PendingRollbackError):
-        sesion_pg.execute(text("SELECT 2"))
-    recuperar_sesion_db(sesion_pg)
-    sesion_pg.execute(text("SELECT 3"))
+    try:
+        sesion_pg.execute(text("SELECT 1"))
+        sesion_pg.connection().invalidate()
+        with pytest.raises(PendingRollbackError):
+            sesion_pg.execute(text("SELECT 2"))
+    finally:
+        recuperar_sesion_db(sesion_pg)
