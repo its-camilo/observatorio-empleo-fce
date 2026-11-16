@@ -240,6 +240,11 @@ class Curso(Base):
     num_calificaciones: Mapped[int | None] = mapped_column(Integer)
     inscritos_recientes: Mapped[int | None] = mapped_column(Integer)
     posicion: Mapped[int | None] = mapped_column(Integer)
+    habilidad_demanda: Mapped[str | None] = mapped_column(String(160))
+    demanda_ofertas: Mapped[int | None] = mapped_column(Integer)
+    demanda_pct: Mapped[float | None] = mapped_column(Float)
+    demanda_carreras: Mapped[str | None] = mapped_column(Text)
+    puntaje_recomendacion: Mapped[float | None] = mapped_column(Float, index=True)
     fecha_extraccion: Mapped[date] = mapped_column(Date, default=lambda: ahora().date())
 
 

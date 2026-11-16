@@ -26,8 +26,42 @@ COLUMNAS = {
     "ejecuciones": ["id_ejecucion", "fecha", "semestre", "corte", "ejecutado_por", "fuentes", "ofertas_encontradas",
                     "duplicados_eliminados", "errores", "estado", "ejecutor", "ofertas_guardadas", "no_relevantes", "total_corte",
                     "mini_corrida", "duracion_segundos"],
-    "cursos": ["plataforma", "termino", "titulo", "url", "organizacion", "nivel", "tipo", "calificacion", "num_calificaciones",
-               "inscritos_recientes", "posicion", "semestre", "corte", "fecha_extraccion"],
+    "cursos": [
+        "plataforma",
+        "termino",
+        "habilidad_demanda",
+        "demanda_ofertas",
+        "demanda_pct",
+        "puntaje_recomendacion",
+        "titulo",
+        "url",
+        "organizacion",
+        "nivel",
+        "tipo",
+        "calificacion",
+        "num_calificaciones",
+        "inscritos_recientes",
+        "posicion",
+        "semestre",
+        "corte",
+        "fecha_extraccion",
+    ],
+    "temas_recomendados": [
+        "semestre",
+        "corte",
+        "tema",
+        "grupo",
+        "ofertas",
+        "pct_ofertas",
+        "variacion_pp",
+        "por_carrera_json",
+        "curso1_titulo",
+        "curso1_url",
+        "curso2_titulo",
+        "curso2_url",
+        "curso3_titulo",
+        "curso3_url",
+    ],
 }
 TABLAS = tuple(COLUMNAS)
 
@@ -101,11 +135,34 @@ def filas(s: Session, tabla: str, semestre: str | None = None, corte: str | None
         for e in s.scalars(q):
             yield {c: getattr(e, c) for c in COLUMNAS["ejecuciones"]}
     elif tabla == "cursos":
-        q = filtrar(select(Curso), Curso).order_by(Curso.id).offset(desde)
+        q = filtrar(select(Curso), Curso).order_by(Curso.puntaje_recomendacion.desc().nullslast(), Curso.id).offset(desde)
         if limite:
             q = q.limit(limite)
         for c in s.scalars(q):
             yield {k: getattr(c, k) for k in COLUMNAS["cursos"]}
+    elif tabla == "temas_recomendados":
+        if not semestre or not corte:
+            return
+        from observatorio.consultas import listar_temas_recomendados
+        import json
+
+        for t in listar_temas_recomendados(s, semestre, corte, limite=limite or 200):
+            refs = t.get("cursos_referencia") or []
+            row = {
+                "semestre": t["semestre"],
+                "corte": t["corte"],
+                "tema": t["tema"],
+                "grupo": t["grupo"],
+                "ofertas": t["ofertas"],
+                "pct_ofertas": t["pct_ofertas"],
+                "variacion_pp": t.get("variacion_pp"),
+                "por_carrera_json": json.dumps(t.get("por_carrera") or {}, ensure_ascii=False),
+            }
+            for i in range(3):
+                ref = refs[i] if i < len(refs) else {}
+                row[f"curso{i + 1}_titulo"] = ref.get("titulo")
+                row[f"curso{i + 1}_url"] = ref.get("url")
+            yield row
     else:
         raise ValueError(f"Tabla desconocida: {tabla}")
 
@@ -134,8 +191,14 @@ def a_excel(s: Session, semestre: str | None = None, corte: str | None = None, i
 
     wb = Workbook(write_only=False)
     wb.remove(wb.active)
-    for tabla, titulo in (("ofertas", "Ofertas"), ("oferta_software", "Oferta_Software"), ("catalogo", "Catalogo"),
-                          ("ejecuciones", "Ejecuciones"), ("cursos", "Cursos")):
+    for tabla, titulo in (
+        ("ofertas", "Ofertas"),
+        ("oferta_software", "Oferta_Software"),
+        ("catalogo", "Catalogo"),
+        ("ejecuciones", "Ejecuciones"),
+        ("cursos", "Cursos"),
+        ("temas_recomendados", "Temas_recomendados"),
+    ):
         ws = wb.create_sheet(titulo)
         ws.append(COLUMNAS[tabla])
         for c in ws[1]:

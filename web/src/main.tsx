@@ -18,6 +18,7 @@ const NoCatalogados = lazy(() => import("./paginas/NoCatalogados"));
 const Validacion = lazy(() => import("./paginas/Validacion"));
 const Usuarios = lazy(() => import("./paginas/Usuarios"));
 const Cursos = lazy(() => import("./paginas/Cursos"));
+const TemasRecomendados = lazy(() => import("./paginas/TemasRecomendados"));
 const Configuracion = lazy(() => import("./paginas/Configuracion"));
 const TokensMcp = lazy(() => import("./paginas/TokensMcp"));
 
@@ -37,6 +38,7 @@ const MENU: { a: string; texto: string; admin?: boolean }[] = [
   { a: "/no-catalogados", texto: "No catalogados" },
   { a: "/validacion", texto: "Validación" },
   { a: "/cursos", texto: "Cursos en tendencia" },
+  { a: "/temas-recomendados", texto: "Temas para dictar" },
   { a: "/configuracion", texto: "Configuración" },
   { a: "/usuarios", texto: "Usuarios", admin: true },
   { a: "/tokens-mcp", texto: "Tokens MCP" },
@@ -158,6 +160,7 @@ function App() {
             <Route path="/no-catalogados" element={<NoCatalogados />} />
             <Route path="/validacion" element={<Validacion />} />
             <Route path="/cursos" element={<Cursos />} />
+            <Route path="/temas-recomendados" element={<TemasRecomendados />} />
             <Route path="/configuracion" element={<Configuracion />} />
             <Route path="/usuarios" element={<SoloAdmin><Usuarios /></SoloAdmin>} />
             <Route path="/tokens-mcp" element={<TokensMcp />} />
