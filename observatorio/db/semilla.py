@@ -7,7 +7,17 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from observatorio.config import ajustes
-from observatorio.db.modelos import Catalogo, Config, Sinonimo, TerminoBusqueda, Usuario
+from observatorio.db.modelos import (
+    Catalogo,
+    CatalogoHabilidad,
+    CatalogoIdioma,
+    Config,
+    Sinonimo,
+    SinonimoHabilidad,
+    SinonimoIdioma,
+    TerminoBusqueda,
+    Usuario,
+)
 from observatorio.parametros import POR_DEFECTO
 
 DATOS = Path(__file__).resolve().parent.parent / "datos"
@@ -88,9 +98,39 @@ def sembrar_admins(s: Session) -> int:
     return n
 
 
+def sembrar_habilidades_idiomas(s: Session) -> int:
+    if s.query(CatalogoHabilidad).count() and s.query(CatalogoIdioma).count():
+        return 0
+    datos = json.loads((DATOS / "habilidades_idiomas.json").read_text(encoding="utf-8"))
+    n = 0
+    for h in datos.get("habilidades", []):
+        fila = s.query(CatalogoHabilidad).filter_by(nombre=h["nombre"]).one_or_none()
+        if fila is None:
+            fila = CatalogoHabilidad(nombre=h["nombre"], activo=True)
+            s.add(fila)
+            s.flush()
+            n += 1
+        for texto in h.get("sinonimos", []):
+            if not any(x.texto == texto for x in fila.sinonimos):
+                fila.sinonimos.append(SinonimoHabilidad(texto=texto))
+    for i in datos.get("idiomas", []):
+        fila = s.query(CatalogoIdioma).filter_by(nombre=i["nombre"]).one_or_none()
+        if fila is None:
+            fila = CatalogoIdioma(nombre=i["nombre"], activo=True)
+            s.add(fila)
+            s.flush()
+            n += 1
+        for texto in i.get("sinonimos", []):
+            if not any(x.texto == texto for x in fila.sinonimos):
+                fila.sinonimos.append(SinonimoIdioma(texto=texto))
+    s.flush()
+    return n
+
+
 def sembrar_todo(s: Session) -> dict[str, int]:
     return {
         "catalogo": sembrar_catalogo(s),
+        "habilidades_idiomas": sembrar_habilidades_idiomas(s),
         "terminos": sembrar_terminos(s),
         "config": sembrar_config(s),
         "admins": sembrar_admins(s),

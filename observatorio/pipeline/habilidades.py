@@ -40,8 +40,10 @@ HABILIDADES_BLANDAS = {
 }
 
 
-def detectar_idiomas(texto: str) -> str:
+def detectar_idiomas(texto: str, detector=None) -> str:
     """Devuelve p. ej. 'Inglés B2; Portugués básico'."""
+    if detector is not None:
+        return detector.texto_idiomas(detector.detectar_idiomas(texto)) or ""
     t = plegar(texto or "")
     resultado: dict[str, str] = {}
     for idioma, patron in IDIOMAS.items():
@@ -60,7 +62,9 @@ def detectar_idiomas(texto: str) -> str:
     return "; ".join(f"{k} {v}".strip() for k, v in resultado.items())
 
 
-def detectar_blandas(texto: str) -> str:
+def detectar_blandas(texto: str, detector=None) -> str:
+    if detector is not None:
+        return detector.texto_blandas(detector.detectar_blandas(texto)) or ""
     t = plegar(texto or "")
     halladas = [nombre for nombre, frases in HABILIDADES_BLANDAS.items()
                 if any(re.search(rf"\b{re.escape(f)}\b", t) for f in frases)]

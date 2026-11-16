@@ -1,0 +1,107 @@
+{
+  "habilidades": [
+    {
+      "nombre": "Comunicación",
+      "sinonimos": [
+        "comunicacion asertiva",
+        "comunicacion efectiva",
+        "habilidades de comunicacion",
+        "comunicacion oral",
+        "comunicacion escrita",
+        "communication skills"
+      ]
+    },
+    {
+      "nombre": "Trabajo en equipo",
+      "sinonimos": ["trabajo en equipo", "teamwork", "colaboracion", "trabajo colaborativo"]
+    },
+    {
+      "nombre": "Liderazgo",
+      "sinonimos": ["liderazgo", "leadership", "liderar equipos"]
+    },
+    {
+      "nombre": "Pensamiento analítico",
+      "sinonimos": [
+        "pensamiento analitico",
+        "capacidad analitica",
+        "habilidades analiticas",
+        "analytical skills"
+      ]
+    },
+    {
+      "nombre": "Pensamiento crítico",
+      "sinonimos": ["pensamiento critico", "critical thinking", "criterio"]
+    },
+    {
+      "nombre": "Resolución de problemas",
+      "sinonimos": ["resolucion de problemas", "solucion de problemas", "problem solving", "toma de decisiones"]
+    },
+    {
+      "nombre": "Orientación al resultado",
+      "sinonimos": [
+        "orientacion al logro",
+        "orientacion a resultados",
+        "orientacion al resultado",
+        "results oriented"
+      ]
+    },
+    {
+      "nombre": "Servicio al cliente",
+      "sinonimos": [
+        "orientacion al cliente",
+        "orientacion al servicio",
+        "servicio al cliente",
+        "customer service"
+      ]
+    },
+    {
+      "nombre": "Organización",
+      "sinonimos": [
+        "organizacion",
+        "planificacion",
+        "gestion del tiempo",
+        "atencion al detalle",
+        "atencion a los detalles",
+        "time management",
+        "detail oriented"
+      ]
+    },
+    {
+      "nombre": "Adaptabilidad",
+      "sinonimos": ["adaptabilidad", "adaptacion al cambio", "flexibilidad", "manejo del cambio"]
+    },
+    {
+      "nombre": "Proactividad",
+      "sinonimos": ["proactividad", "proactivo", "proactiva", "iniciativa", "proactive"]
+    },
+    {
+      "nombre": "Negociación",
+      "sinonimos": ["negociacion", "negotiation", "habilidades de negociacion"]
+    },
+    {
+      "nombre": "Ética y responsabilidad",
+      "sinonimos": ["etica", "responsabilidad", "integridad", "confidencialidad", "honestidad"]
+    },
+    {
+      "nombre": "Trabajo bajo presión",
+      "sinonimos": ["trabajo bajo presion", "manejo de la presion", "bajo presion"]
+    },
+    {
+      "nombre": "Relaciones interpersonales",
+      "sinonimos": [
+        "relaciones interpersonales",
+        "habilidades interpersonales",
+        "empatia",
+        "interpersonal skills"
+      ]
+    }
+  ],
+  "idiomas": [
+    {"nombre": "Inglés", "sinonimos": ["ingles", "english", "bilingue", "bilingual"]},
+    {"nombre": "Portugués", "sinonimos": ["portugues", "portuguese"]},
+    {"nombre": "Francés", "sinonimos": ["frances", "french"]},
+    {"nombre": "Alemán", "sinonimos": ["aleman", "german"]},
+    {"nombre": "Italiano", "sinonimos": ["italiano", "italian"]},
+    {"nombre": "Mandarín", "sinonimos": ["mandarin", "chino", "chinese"]}
+  ]
+}

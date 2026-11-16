@@ -17,10 +17,10 @@ from observatorio.db.crudas import (
     recuperar_sesion_db,
 )
 
-from observatorio.db.modelos import Ejecucion, NoCatalogado, Oferta, OfertaCruda, OfertaSoftware, ahora
+from observatorio.db.modelos import Ejecucion, NoCatalogado, Oferta, OfertaCruda, OfertaHabilidad, OfertaIdioma, OfertaSoftware, ahora
 from observatorio.pipeline.clasificacion import ClasificadorReglas, Clasificacion
 from observatorio.pipeline.dedup import _cerca, deduplicar
-from observatorio.pipeline.habilidades import detectar_blandas, detectar_idiomas
+from observatorio.pipeline.detector_habilidades_idiomas import DetectorHabilidadesIdiomas
 from observatorio.pipeline.limpieza import normalizar_cruda
 from observatorio.pipeline.no_catalogados import contar_no_catalogados
 from observatorio.pipeline.software import DetectorSoftware
@@ -64,6 +64,7 @@ class Procesador:
         self.ejec = ejec
         self.cfg = cfg
         self.detector = DetectorSoftware.desde_bd(s)
+        self.detector_gc = DetectorHabilidadesIdiomas.desde_bd(s)
         self.clasificador = ClasificadorReglas(
             cfg["reglas_carrera"],
             cfg["exclusion_titulo"],
@@ -108,9 +109,43 @@ class Procesador:
         o.softwares = [OfertaSoftware(software=d.software, grupo_software=d.grupo, texto_encontrado=d.texto_encontrado[:255],
                                       carrera=o.carrera, semestre=o.semestre, corte=o.corte) for d in dets]
         o.num_softwares = len(dets)
+        self._aplicar_habilidades_idiomas(o)
+
+    def _aplicar_habilidades_idiomas(self, o: Oferta) -> None:
         texto = f"{o.cargo}\n{o.descripcion or ''}"
-        o.idiomas = detectar_idiomas(texto)[:255] or None
-        o.habilidades_blandas = detectar_blandas(texto) or None
+        if o.habilidades:
+            for x in list(o.habilidades):
+                self.s.delete(x)
+            o.habilidades = []
+        if o.idiomas_detectados:
+            for x in list(o.idiomas_detectados):
+                self.s.delete(x)
+            o.idiomas_detectados = []
+            self.s.flush()
+        blandas = self.detector_gc.detectar_blandas(texto)
+        idiomas = self.detector_gc.detectar_idiomas(texto)
+        o.habilidades_blandas = self.detector_gc.texto_blandas(blandas) or None
+        o.idiomas = self.detector_gc.texto_idiomas(idiomas)[:255] or None
+        o.habilidades = [
+            OfertaHabilidad(
+                habilidad=h.habilidad,
+                texto_encontrado=h.texto[:255],
+                carrera=o.carrera,
+                semestre=o.semestre,
+                corte=o.corte,
+            )
+            for h in blandas
+        ]
+        o.idiomas_detectados = [
+            OfertaIdioma(
+                idioma=i.idioma,
+                nivel=(i.nivel or "")[:40] or None,
+                carrera=o.carrera,
+                semestre=o.semestre,
+                corte=o.corte,
+            )
+            for i in idiomas
+        ]
 
     # ------------------------------------------------------------------
     def procesar_bloque(self, crudas: list[OfertaCruda]) -> ResultadoProceso:

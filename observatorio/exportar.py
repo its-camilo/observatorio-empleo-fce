@@ -7,13 +7,22 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 from datetime import date, datetime
 from typing import Iterable, Iterator
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from observatorio.db.modelos import Catalogo, Curso, Ejecucion, Oferta, OfertaSoftware
+from observatorio.db.modelos import (
+    Catalogo,
+    Curso,
+    Ejecucion,
+    Oferta,
+    OfertaHabilidad,
+    OfertaIdioma,
+    OfertaSoftware,
+)
 from observatorio.filtro_ofertas import oferta_incluida_en_resultados
 
 COLUMNAS = {
@@ -62,6 +71,8 @@ COLUMNAS = {
         "curso3_titulo",
         "curso3_url",
     ],
+    "oferta_habilidades": ["id_oferta", "habilidad", "texto_encontrado", "carrera", "semestre", "corte"],
+    "oferta_idiomas": ["id_oferta", "idioma", "nivel", "carrera", "semestre", "corte"],
 }
 TABLAS = tuple(COLUMNAS)
 
@@ -144,7 +155,6 @@ def filas(s: Session, tabla: str, semestre: str | None = None, corte: str | None
         if not semestre or not corte:
             return
         from observatorio.consultas import listar_temas_recomendados
-        import json
 
         for t in listar_temas_recomendados(s, semestre, corte, limite=limite or 200):
             refs = t.get("cursos_referencia") or []
@@ -163,6 +173,30 @@ def filas(s: Session, tabla: str, semestre: str | None = None, corte: str | None
                 row[f"curso{i + 1}_titulo"] = ref.get("titulo")
                 row[f"curso{i + 1}_url"] = ref.get("url")
             yield row
+    elif tabla == "oferta_habilidades":
+        q = (
+            filtrar(select(OfertaHabilidad), OfertaHabilidad)
+            .join(Oferta, OfertaHabilidad.id_oferta == Oferta.id_oferta)
+            .where(oferta_incluida_en_resultados())
+            .order_by(OfertaHabilidad.id)
+            .offset(desde)
+        )
+        if limite:
+            q = q.limit(limite)
+        for o in s.scalars(q):
+            yield {c: getattr(o, c) for c in COLUMNAS["oferta_habilidades"]}
+    elif tabla == "oferta_idiomas":
+        q = (
+            filtrar(select(OfertaIdioma), OfertaIdioma)
+            .join(Oferta, OfertaIdioma.id_oferta == Oferta.id_oferta)
+            .where(oferta_incluida_en_resultados())
+            .order_by(OfertaIdioma.id)
+            .offset(desde)
+        )
+        if limite:
+            q = q.limit(limite)
+        for o in s.scalars(q):
+            yield {c: getattr(o, c) for c in COLUMNAS["oferta_idiomas"]}
     else:
         raise ValueError(f"Tabla desconocida: {tabla}")
 
@@ -187,13 +221,15 @@ def a_excel(s: Session, semestre: str | None = None, corte: str | None = None, i
     from openpyxl import Workbook
     from openpyxl.styles import Font
 
-    from observatorio.analisis import cortes_disponibles, ranking
+    from observatorio.analisis import cortes_disponibles, ranking, ranking_habilidades, ranking_idiomas
 
     wb = Workbook(write_only=False)
     wb.remove(wb.active)
     for tabla, titulo in (
         ("ofertas", "Ofertas"),
         ("oferta_software", "Oferta_Software"),
+        ("oferta_habilidades", "Oferta_Habilidades"),
+        ("oferta_idiomas", "Oferta_Idiomas"),
         ("catalogo", "Catalogo"),
         ("ejecuciones", "Ejecuciones"),
         ("cursos", "Cursos"),
@@ -218,6 +254,24 @@ def a_excel(s: Session, semestre: str | None = None, corte: str | None = None, i
         for car in carreras:
             for r in ranking(s, sem, cor, car):
                 ws.append([_texto(r.get(c)) if c not in ("porcentaje", "variacion_pp", "posicion", "ofertas") else r.get(c) for c in cab])
+    ws = wb.create_sheet("Ranking_Habilidades")
+    cab_h = ["semestre", "corte", "carrera", "posicion", "habilidad", "ofertas", "porcentaje"]
+    ws.append(cab_h)
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    for sem, cor in cortes:
+        for car in carreras:
+            for r in ranking_habilidades(s, sem, cor, car):
+                ws.append([_texto(r.get(x)) if x not in ("porcentaje", "posicion", "ofertas") else r.get(x) for x in cab_h])
+    ws = wb.create_sheet("Ranking_Idiomas")
+    cab_i = ["semestre", "corte", "carrera", "posicion", "idioma", "ofertas", "porcentaje"]
+    ws.append(cab_i)
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    for sem, cor in cortes:
+        for car in carreras:
+            for r in ranking_idiomas(s, sem, cor, car):
+                ws.append([_texto(r.get(x)) if x not in ("porcentaje", "posicion", "ofertas") else r.get(x) for x in cab_i])
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
