@@ -204,15 +204,49 @@ def demanda_temas(
     return items
 
 
+def _a_entero_no_negativo(val: Any) -> int:
+    if val is None:
+        return 0
+    if isinstance(val, str):
+        s = val.strip().lower()
+        if not s or s in ("nan", "inf", "+inf", "-inf", "none", "null"):
+            return 0
+    try:
+        f = float(val)
+        if not math.isfinite(f):
+            return 0
+        n = int(f)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+    return max(0, n)
+
+
+def _a_float_no_negativo(val: Any) -> float:
+    if val is None:
+        return 0.0
+    if isinstance(val, str):
+        s = val.strip().lower()
+        if not s or s in ("nan", "inf", "+inf", "-inf", "none", "null"):
+            return 0.0
+    try:
+        f = float(val)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    if not math.isfinite(f):
+        return 0.0
+    return max(0.0, f)
+
+
 def _senal_plataforma(c: dict) -> float:
     plat = (c.get("plataforma") or "").lower()
-    pos = max(1, int(c.get("posicion") or 20))
+    pos_raw = c.get("posicion")
+    pos = max(1, _a_entero_no_negativo(pos_raw) or (20 if pos_raw is None else 1))
     pos_score = 1.0 / pos
     if plat == "edx":
-        ins = int(c.get("inscritos_recientes") or 0)
+        ins = _a_entero_no_negativo(c.get("inscritos_recientes"))
         return pos_score * math.log1p(ins)
-    cal = float(c.get("calificacion") or 0)
-    num = int(c.get("num_calificaciones") or 0)
+    cal = _a_float_no_negativo(c.get("calificacion"))
+    num = _a_entero_no_negativo(c.get("num_calificaciones"))
     if cal > 0 and num > 0:
         return pos_score * cal * math.log1p(num)
     return pos_score
