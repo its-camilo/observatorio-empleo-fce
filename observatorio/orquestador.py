@@ -14,7 +14,7 @@ import uuid
 from collections import Counter
 from datetime import date
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from observatorio.db.crudas import asegurar_sesion_activa, commit_extraccion, insertar_cruda, ids_crudas_ejecucion_fuente
@@ -713,9 +713,11 @@ def consolidar(s: Session, id_ejecucion: str, permitir_mini: bool = True) -> Eje
         cc = cfg.get("cursos") or {}
         if cc.get("activo", True):
             try:
-                extraer_cursos_corrida(s, id_ejecucion)
+                with s.begin_nested():
+                    extraer_cursos_corrida(s, id_ejecucion)
             except Exception as e:  # noqa: BLE001
                 log.warning("Cursos tras consolidar falló (%s): %s", id_ejecucion, e)
+                asegurar_sesion_activa(s)
         s.commit()
         return ejec
     except Exception as e:
@@ -921,16 +923,20 @@ def extraer_cursos_corrida(s: Session, id_ejecucion: str, terminos: list[str] | 
     peso = float(cc.get("peso_demanda_puntaje", 0.65))
     normalizar_senales_plataforma(cursos)
 
-    for row in s.scalars(select(Curso).where(Curso.id_ejecucion == id_ejecucion)):
-        s.delete(row)
+    s.execute(delete(Curso).where(Curso.id_ejecucion == id_ejecucion))
+    s.flush()
 
-    vistos: set[str] = set()
+    vistos: set[tuple[str, str]] = set()
     n = 0
     for c in cursos:
         url = c.get("url")
-        if not url or url in vistos:
+        plataforma = (c.get("plataforma") or "").strip()
+        if not url:
             continue
-        vistos.add(url)
+        clave = (plataforma.lower(), url)
+        if clave in vistos:
+            continue
+        vistos.add(clave)
         dem = coincidencia_habilidad(c.get("termino", ""), c.get("termino", ""), idx)
         dem_pct = dem.pct if dem else 0.0
         puntaje = calcular_puntaje_recomendacion(dem_pct, float(c.get("_senal_plat", 0)), peso)
