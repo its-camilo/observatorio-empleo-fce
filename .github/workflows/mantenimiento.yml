@@ -11,6 +11,21 @@ on:
         required: true
         type: boolean
         default: false
+      backfill_habilidades:
+        description: "RF-18: tras migrar/semilla, repoblar habilidades e idiomas en ofertas guardadas"
+        required: true
+        type: boolean
+        default: false
+      backfill_semestre:
+        description: "Backfill: semestre opcional (vacío = todos)"
+        required: false
+        type: string
+        default: ""
+      backfill_corte:
+        description: "Backfill: corte opcional (inicio, mitad, final; vacío = todos)"
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: observatorio-mantenimiento
@@ -41,6 +56,18 @@ jobs:
         run: |
           echo "=== Semilla ==="
           python -m observatorio.run semilla
+      - name: Backfill habilidades e idiomas (RF-18)
+        if: inputs.backfill_habilidades
+        run: |
+          ARGS=()
+          if [ -n "${{ inputs.backfill_semestre }}" ]; then
+            ARGS+=(--semestre "${{ inputs.backfill_semestre }}")
+          fi
+          if [ -n "${{ inputs.backfill_corte }}" ]; then
+            ARGS+=(--corte "${{ inputs.backfill_corte }}")
+          fi
+          echo "=== Backfill habilidades/idiomas (semestre/corte opcionales) ==="
+          python -m observatorio.run backfill-habilidades "${ARGS[@]}"
       - name: Purga por reglas (vista previa o aplicar)
         run: |
           echo "=== Purga por reglas (aplicar=${{ inputs.aplicar }}) ==="
