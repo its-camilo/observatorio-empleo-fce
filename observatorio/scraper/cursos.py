@@ -34,7 +34,30 @@ def _num(texto: str) -> int | None:
         v = float(m.group(1))
     except ValueError:
         return None
-    return int(v * (1000 if m.group(2) == "k" else 1_000_000 if m.group(2) == "m" else 1))
+    n = int(v * (1000 if m.group(2) == "k" else 1_000_000 if m.group(2) == "m" else 1))
+    return n if n >= 0 else None
+
+
+def _entero_api(val) -> int | None:
+    if val is None:
+        return None
+    try:
+        n = int(float(val))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return n if n >= 0 else None
+
+
+def _calificacion_api(val) -> float | None:
+    if val is None:
+        return None
+    try:
+        f = float(val)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if f != f or f == float("inf") or f == float("-inf") or f < 0:
+        return None
+    return round(f, 2)
 
 
 class Coursera:
@@ -57,8 +80,9 @@ class Coursera:
             yield {"plataforma": self.nombre, "termino": termino, "titulo": e.get("name", ""),
                    "url": urljoin("https://www.coursera.org", e.get("url", "")), "organizacion": ", ".join(e.get("partners") or []),
                    "nivel": (e.get("productDifficultyLevel") or "").capitalize(), "tipo": e.get("productType", ""),
-                   "calificacion": round(float(e["avgProductRating"]), 2) if e.get("avgProductRating") else None,
-                   "num_calificaciones": e.get("numProductRatings"), "inscritos_recientes": None, "posicion": i}
+                   "calificacion": _calificacion_api(e.get("avgProductRating")),
+                   "num_calificaciones": _entero_api(e.get("numProductRatings")),
+                   "inscritos_recientes": None, "posicion": i}
 
 
 class Edx:
@@ -98,7 +122,8 @@ class Edx:
             yield {"plataforma": self.nombre, "termino": termino, "titulo": h.get("title", ""),
                    "url": h.get("marketing_url") or "", "organizacion": ", ".join(h.get("partner") or []),
                    "nivel": ", ".join(h.get("level") or []), "tipo": h.get("product", ""), "calificacion": None,
-                   "num_calificaciones": None, "inscritos_recientes": int(h["recent_enrollment_count"]) if h.get("recent_enrollment_count") else None,
+                   "num_calificaciones": None,
+                   "inscritos_recientes": _entero_api(h.get("recent_enrollment_count")),
                    "posicion": i}
 
 
@@ -128,7 +153,7 @@ class Platzi:
             votos = a.select_one('[class*="Rank__Ratings"]')
             yield {"plataforma": self.nombre, "termino": termino, "titulo": h.get_text(" ", strip=True)[:300],
                    "url": "https://platzi.com" + href, "organizacion": "Platzi", "nivel": None, "tipo": "Curso",
-                   "calificacion": float(estrellas.get_text(strip=True)) if estrellas else None,
+                   "calificacion": _calificacion_api(estrellas.get_text(strip=True)) if estrellas else None,
                    "num_calificaciones": _num(votos.get_text("", strip=True).strip("() ")) if votos else None,
                    "inscritos_recientes": None, "posicion": i}
             if i >= n:

@@ -1,11 +1,16 @@
 """Cursos desde demanda en ofertas y temas para dictado."""
+import math
 from datetime import date
 
+import pytest
+
 from observatorio.cursos_demanda import (
+    _senal_plataforma,
     calcular_puntaje_recomendacion,
     consulta_para,
     contar_demanda_software,
     demanda_temas,
+    normalizar_senales_plataforma,
     terminos_para_busqueda_cursos,
 )
 from observatorio.db.modelos import Ejecucion, Oferta, OfertaSoftware
@@ -44,6 +49,31 @@ def test_terminos_desde_ofertas_y_fallback(sesion):
     terminos = terminos_para_busqueda_cursos(sesion, "2026-II", "Mitad", cfg)
     assert any(t.habilidad == "Power BI" for t in terminos)
     assert terminos[0].ofertas >= 8
+
+
+@pytest.mark.parametrize(
+    "curso",
+    [
+        {"plataforma": "edX", "posicion": 1, "inscritos_recientes": -1},
+        {"plataforma": "edX", "posicion": 1, "inscritos_recientes": None},
+        {"plataforma": "edX", "posicion": 1, "inscritos_recientes": "no-es-numero"},
+        {"plataforma": "edX", "posicion": 1, "inscritos_recientes": float("nan")},
+        {"plataforma": "Coursera", "posicion": 2, "calificacion": -3.5, "num_calificaciones": -10},
+        {"plataforma": "Coursera", "posicion": 2, "calificacion": None, "num_calificaciones": "1.2k"},
+        {"plataforma": "Platzi", "posicion": "bad", "calificacion": float("inf"), "num_calificaciones": -1},
+    ],
+)
+def test_senal_plataforma_sin_domain_error_y_puntaje_acotado(curso):
+    senal = _senal_plataforma(curso)
+    assert math.isfinite(senal)
+    assert senal >= 0
+    lote = [dict(curso)]
+    normalizar_senales_plataforma(lote)
+    norm = lote[0]["_senal_plat"]
+    assert math.isfinite(norm)
+    assert 0.0 <= norm <= 1.0
+    puntaje = calcular_puntaje_recomendacion(40.0, norm)
+    assert 0.0 <= puntaje <= 1.0
 
 
 def test_puntaje_recomendacion_pesa_demanda():
