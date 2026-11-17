@@ -7,12 +7,17 @@ on:
   workflow_dispatch:
     inputs:
       aplicar:
-        description: "Purga por reglas: false = solo vista previa; true = ejecuta --aplicar"
+        description: "Purga por reglas y backfill sector: false = vista previa; true = escribe cambios (--aplicar)"
         required: true
         type: boolean
         default: false
       backfill_habilidades:
         description: "RF-18: tras migrar/semilla, repoblar habilidades e idiomas en ofertas guardadas"
+        required: true
+        type: boolean
+        default: false
+      backfill_sector:
+        description: "§9.1: inferir sector faltante (usa «aplicar» abajo para escribir o solo contar)"
         required: true
         type: boolean
         default: false
@@ -56,6 +61,22 @@ jobs:
         run: |
           echo "=== Semilla ==="
           python -m observatorio.run semilla
+      - name: Backfill sector industrial (§9.1)
+        if: inputs.backfill_sector
+        run: |
+          ARGS=()
+          if [ -n "${{ inputs.backfill_semestre }}" ]; then
+            ARGS+=(--semestre "${{ inputs.backfill_semestre }}")
+          fi
+          if [ -n "${{ inputs.backfill_corte }}" ]; then
+            ARGS+=(--corte "${{ inputs.backfill_corte }}")
+          fi
+          echo "=== Backfill sector (aplicar=${{ inputs.aplicar }}) ==="
+          if [ "${{ inputs.aplicar }}" = "true" ]; then
+            python -m observatorio.run backfill-sector --aplicar "${ARGS[@]}"
+          else
+            python -m observatorio.run backfill-sector "${ARGS[@]}"
+          fi
       - name: Backfill habilidades e idiomas (RF-18)
         if: inputs.backfill_habilidades
         run: |
