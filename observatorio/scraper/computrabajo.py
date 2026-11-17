@@ -18,6 +18,7 @@ from bs4 import BeautifulSoup
 
 from observatorio.scraper.base import Consulta, OfertaCrudaDatos
 from observatorio.scraper.http import ClienteHttp
+from observatorio.pipeline.sector import extraer_sector_texto
 from observatorio.texto import sin_tildes
 
 log = logging.getLogger("observatorio.computrabajo")
@@ -131,9 +132,12 @@ class Computrabajo:
                 if not det.get("descripcion"):
                     stats["sin_detalle"] += 1
                 entregadas += 1
+                desc = det.get("descripcion", "")
                 yield OfertaCrudaDatos(
                     fuente=self.nombre, id_fuente=t["id"], url=t["url"], cargo=t["cargo"], empresa=t["empresa"],
                     ubicacion=t["ubicacion"], fecha_publicacion=t["fecha"] or det.get("fecha", ""),
-                    descripcion=det.get("descripcion", ""), tipo_empleo=det.get("modalidad", ""),
+                    descripcion=desc,
+                    sector=extraer_sector_texto(desc) or "",
+                    tipo_empleo=det.get("modalidad", ""),
                     remoto=True if re.search(r"remoto", det.get("modalidad", ""), re.I) else None,
                 )

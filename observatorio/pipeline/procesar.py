@@ -28,6 +28,7 @@ from observatorio.pipeline.valor_formativo import oferta_tiene_valor_formativo, 
 from observatorio.capitales import es_capital_departamental
 from observatorio.cupos_guardadas import ControlCuposGuardadas, presupuestos_guardadas
 from observatorio.pipeline.nivel_experiencia import nivel_permitido, niveles_efectivos
+from observatorio.pipeline.sector import construir_mapa_sector_por_empresa, inferir_sector_empresa, sector_desde_fuente
 from observatorio.texto import es_colombia, normalizar_clave
 
 log = logging.getLogger("observatorio.procesar")
@@ -82,10 +83,19 @@ class Procesador:
         self.solo_capitales = bool(cfg.get("solo_capitales_departamento", True))
         ne_cfg = (ejec.parametros or {}).get("niveles_experiencia", cfg.get("niveles_experiencia"))
         self._niveles_permitidos = niveles_efectivos(ne_cfg)
+        self._mapa_sector_empresa: dict[str, str] | None = None
         self.total = ResultadoProceso()
         params = ejec.parametros or {}
         pf, pc, pfc = presupuestos_guardadas(params, cfg)
         self.cupos = ControlCuposGuardadas(s, ejec.id_ejecucion, pf, pc, pfc)
+
+    def _sector_oferta(self, u: dict) -> str | None:
+        sec = sector_desde_fuente(u.get("sector"), u.get("descripcion"))
+        if sec:
+            return sec
+        if self._mapa_sector_empresa is None:
+            self._mapa_sector_empresa = construir_mapa_sector_por_empresa(self.s)
+        return inferir_sector_empresa(u.get("empresa"), self._mapa_sector_empresa)
 
     # ------------------------------------------------------------------
     def _existentes(self, claves: set[str], ids: set[str]) -> tuple[dict[str, list[Oferta]], dict[str, Oferta]]:
@@ -204,7 +214,7 @@ class Procesador:
             if len(u["descripcion"] or "") > len(previa.descripcion or ""):
                 previa.descripcion = u["descripcion"]
                 previa.url = u["url"] or previa.url
-                previa.sector = previa.sector or u.get("sector")
+                previa.sector = previa.sector or self._sector_oferta(u)
                 self._aplicar_software(previa)
                 r.actualizadas += 1
 
@@ -244,7 +254,7 @@ class Procesador:
             o = Oferta(
                 id_oferta=u["id_oferta"], fuente=u["fuente"], url=u["url"], fecha_publicacion=u["fecha_publicacion"],
                 fecha_extraccion=u["fecha_extraccion"], semestre=u["semestre"], corte=u["corte"], cargo=u["cargo"],
-                empresa=u["empresa"] or None, sector=u.get("sector"), ciudad=u["ciudad"], modalidad=u["modalidad"],
+                empresa=u["empresa"] or None, sector=self._sector_oferta(u), ciudad=u["ciudad"], modalidad=u["modalidad"],
                 tipo_oferta=u["tipo_oferta"], nivel_experiencia=u["nivel_experiencia"], carrera=c.carrera_texto[:255],
                 termino_busqueda=(u["termino_busqueda"] or "")[:255], descripcion=u["descripcion"],
                 carrera_principal=c.carreras[0], id_ejecucion=u["id_ejecucion"], id_fuente=u["id_fuente"],

@@ -5,6 +5,7 @@ import re
 from datetime import date
 
 from observatorio.pipeline.dedup import clave_dedup
+from observatorio.pipeline.sector import sector_desde_fuente
 from observatorio.texto import (
     detectar_modalidad, detectar_nivel, detectar_tipo_oferta, limpiar_descripcion, limpiar_espacios, normalizar_cargo,
     normalizar_ciudad, normalizar_empresa, normalizar_fecha,
@@ -54,7 +55,7 @@ def normalizar_cruda(datos: dict, *, termino: str | None, carrera_termino: str |
         "corte": corte,
         "cargo": cargo[:500],
         "empresa": empresa[:500],
-        "sector": limpiar_espacios(datos.get("sector"))[:255] or None,
+        "sector": sector_desde_fuente(datos.get("sector"), datos.get("descripcion")),
         "ciudad": ciudad,
         "modalidad": modalidad,
         "tipo_oferta": tipo,

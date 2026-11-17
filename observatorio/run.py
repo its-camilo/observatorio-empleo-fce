@@ -27,11 +27,18 @@ import sys
 ACCIONES = (
     "completa", "preparar", "extraer", "extraer-fuente", "extraer-secuencial", "cursos", "consolidar", "reporte",
     "exportar", "migrar", "semilla", "purga-operativa", "purga-reglas", "cerrar-corrida", "cerrar-colgadas",
-    "ajustar-proporciones", "backfill-habilidades",
+    "ajustar-proporciones", "backfill-habilidades", "backfill-sector",
 )
 
 # Comandos de mantenimiento / export que no requieren id de ejecución de corrida.
-ACCIONES_SIN_RUN_ID = frozenset({"exportar", "purga-operativa", "purga-reglas", "cerrar-colgadas", "backfill-habilidades"})
+ACCIONES_SIN_RUN_ID = frozenset({
+    "exportar",
+    "purga-operativa",
+    "purga-reglas",
+    "cerrar-colgadas",
+    "backfill-habilidades",
+    "backfill-sector",
+})
 
 
 def configurar_logs() -> None:
@@ -276,6 +283,15 @@ def main(argv: list[str] | None = None) -> int:
             cor = orq.normalizar_corte(a.corte) if a.corte else None
             print(json.dumps(backfill_habilidades_idiomas(s, sem, cor, a.limite), ensure_ascii=False))
             s.commit()
+            return 0
+        if a.accion == "backfill-sector":
+            from observatorio.pipeline.sector import backfill_sectores
+
+            sem = orq.normalizar_semestre(a.semestre) if a.semestre else None
+            cor = orq.normalizar_corte(a.corte) if a.corte else None
+            print(json.dumps(backfill_sectores(s, sem, cor, a.limite, aplicar=a.aplicar), ensure_ascii=False))
+            if a.aplicar:
+                s.commit()
             return 0
         if a.accion in ("purga-operativa", "purga-reglas"):
             from sqlalchemy import func, select
