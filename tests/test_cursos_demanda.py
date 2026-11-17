@@ -37,6 +37,14 @@ def test_consulta_para_mapea_catalogo():
     assert "NIIF" in consulta_para("niif")
 
 
+def test_consulta_para_access_y_r_sin_falsos_positivos():
+    assert consulta_para("Access") == "Microsoft Access base de datos"
+    assert consulta_para("R") == "R estadística"
+    assert consulta_para("Power Automate") == "Power Automate"
+    assert consulta_para("Trello") == "Trello"
+    assert consulta_para("Introduction to Web Accessibility") == "Introduction to Web Accessibility"
+
+
 def test_terminos_desde_ofertas_y_fallback(sesion):
     cfg = valores_por_defecto()
     ejec = Ejecucion(id_ejecucion="cd-1", semestre="2026-II", corte="Mitad")

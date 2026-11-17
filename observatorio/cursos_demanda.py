@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any
@@ -29,6 +30,7 @@ CONSULTA_BUSQUEDA: dict[str, str] = {
     "chatgpt": "ChatGPT productividad",
     "inteligencia artificial": "inteligencia artificial",
     "machine learning": "machine learning",
+    "access": "Microsoft Access base de datos",
     "r": "R estadística",
     "spss": "SPSS estadística",
     "stata": "Stata econometría",
@@ -50,12 +52,22 @@ class DemandaHabilidad:
     por_carrera: dict[str, dict[str, float]]
 
 
+def _coincide_frontera(texto: str, fragmento: str) -> bool:
+    if not fragmento:
+        return False
+    return re.search(rf"(?<!\w){re.escape(fragmento)}(?!\w)", texto, re.IGNORECASE) is not None
+
+
 def consulta_para(habilidad: str) -> str:
     clave = (habilidad or "").strip().lower()
+    if not clave:
+        return ""
     if clave in CONSULTA_BUSQUEDA:
         return CONSULTA_BUSQUEDA[clave]
     for k, v in CONSULTA_BUSQUEDA.items():
-        if k in clave or clave in k:
+        if len(k) < 3:
+            continue
+        if _coincide_frontera(clave, k) or _coincide_frontera(k, clave):
             return v
     return habilidad.strip()
 
