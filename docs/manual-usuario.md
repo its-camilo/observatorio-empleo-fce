@@ -33,8 +33,11 @@ Cada corrida se marca con **semestre** (ej. 2026-II) y **corte** (inicio, mitad 
    enlace a GitHub Actions.
 5. Solo puede haber una corrida en marcha a la vez.
 
-**Si la corrida queda “incompleta”**: lea los avisos del reporte. Normalmente una fuente pidió bajar el ritmo. Pida a Desarrollo
-relanzarla con el mismo id (continúa sin duplicar) o simplemente lance el siguiente corte; los datos guardados no se pierden.
+**Si la corrida queda “incompleta”**: lea los avisos del reporte. Normalmente una fuente pidió bajar el ritmo o el workflow
+de GitHub alcanzó el límite de tiempo. En **Ejecuciones y reportes**, abra el detalle de la corrida:
+- **Reanudar corrida** (mismo id): continúa consultas pendientes sin repetir las ya hechas.
+- **Reintentar consolidación**: si la extracción ya terminó pero falló el procesamiento o los cursos, relanza solo esa fase.
+Ambos botones piden confirmación y muestran cuántas consultas quedan pendientes cuando aplica.
 
 ## 4. Revisar el reporte (Ejecuciones y reportes)
 

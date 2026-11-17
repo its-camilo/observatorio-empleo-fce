@@ -23,14 +23,18 @@ API = "https://api.github.com"
 
 __all__ = [
     "ErrorCorrida",
+    "acciones_corrida",
     "cerrar_corridas_colgadas",
     "cerrar_ejecucion_error",
+    "contar_consultas_pendientes",
     "ejecucion_dict",
     "estado_github",
     "lanzar",
     "progreso",
+    "reanudar_corrida",
     "reconciliar_corridas_activas",
     "reconciliar_ejecucion",
+    "reintentar_consolidacion_corrida",
 ]
 
 
@@ -46,6 +50,185 @@ def _cabeceras() -> dict:
     return {"Authorization": f"Bearer {a.github_token}", "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
 
 
+def _corrida_activa(s: Session, excluir_id: str | None = None) -> Ejecucion | None:
+    q = select(Ejecucion).where(
+        Ejecucion.estado.in_(["en_cola", "en_curso"]),
+        Ejecucion.creado_en > ahora() - timedelta(hours=8),
+    )
+    if excluir_id:
+        q = q.where(Ejecucion.id_ejecucion != excluir_id)
+    return s.scalars(q).first()
+
+
+def contar_consultas_pendientes(s: Session, id_ejecucion: str) -> int:
+    return int(
+        s.scalar(
+            select(func.count())
+            .select_from(Particion)
+            .where(Particion.id_ejecucion == id_ejecucion, Particion.estado == "pendiente")
+        )
+        or 0
+    )
+
+
+def _contar_crudas(s: Session, id_ejecucion: str) -> int:
+    return int(
+        s.scalar(select(func.count()).select_from(OfertaCruda).where(OfertaCruda.id_ejecucion == id_ejecucion))
+        or 0
+    )
+
+
+def _disparar_workflow_github(inputs: dict) -> None:
+    a = ajustes()
+    cab = _cabeceras()
+    try:
+        r = requests.post(
+            f"{API}/repos/{a.github_repo}/actions/workflows/{a.github_workflow}/dispatches",
+            headers=cab,
+            timeout=20,
+            json={"ref": a.github_ref, "inputs": inputs},
+        )
+    except requests.RequestException as e:
+        raise ErrorCorrida(f"No hubo conexión con GitHub: {e}") from e
+    if r.status_code not in (200, 204):
+        raise ErrorCorrida(
+            f"GitHub rechazó el lanzamiento (HTTP {r.status_code}): {r.text[:300]}. "
+            "Revise GITHUB_TOKEN (permiso Actions: write) y GITHUB_WORKFLOW."
+        )
+
+
+def _marcar_corrida_en_cola(ejec: Ejecucion, solicitado_por: str) -> None:
+    ejec.estado = "en_cola"
+    ejec.fase = "en_cola"
+    ejec.ejecutado_por = solicitado_por
+
+
+def _validar_relanzable(s: Session, ejec: Ejecucion) -> None:
+    if ejec.estado in ("en_cola", "en_curso"):
+        raise ErrorCorrida(
+            f"La corrida {ejec.id_ejecucion} ya está en marcha (estado: {ejec.estado}). "
+            "Espere a que termine antes de intentar de nuevo."
+        )
+    activa = _corrida_activa(s)
+    if activa is not None:
+        raise ErrorCorrida(
+            f"Ya hay una corrida en marcha ({activa.id_ejecucion}). "
+            "Espere a que termine antes de relanzar esta ejecución."
+        )
+
+
+def acciones_corrida(s: Session, ejec: Ejecucion) -> dict:
+    """Indicadores para la UI: reanudar extracción vs reintentar solo consolidación."""
+    pend = contar_consultas_pendientes(s, ejec.id_ejecucion)
+    en_marcha = ejec.estado in ("en_cola", "en_curso")
+    otra = _corrida_activa(s, excluir_id=ejec.id_ejecucion) if not en_marcha else None
+    bloqueado = otra is not None
+    crudas = _contar_crudas(s, ejec.id_ejecucion)
+    puede_reintentar = (
+        not en_marcha
+        and not bloqueado
+        and pend == 0
+        and crudas > 0
+        and ejec.estado in ("fallida", "incompleta")
+    )
+    puede_reanudar = (
+        not en_marcha
+        and not bloqueado
+        and (
+            pend > 0
+            or (ejec.estado in ("incompleta", "fallida") and not puede_reintentar)
+        )
+    )
+    return {
+        "consultas_pendientes": pend,
+        "en_marcha": en_marcha,
+        "bloqueado_por_otra": bloqueado,
+        "id_corrida_activa": otra.id_ejecucion if otra else None,
+        "puede_reanudar": puede_reanudar,
+        "puede_reintentar_consolidacion": puede_reintentar,
+    }
+
+
+def reanudar_corrida(s: Session, id_ejecucion: str, solicitado_por: str) -> Ejecucion:
+    """Relanza corrida.yml con el mismo run_id (fase completa: retoma particiones pendientes)."""
+    ejec = s.get(Ejecucion, id_ejecucion)
+    if ejec is None:
+        raise ErrorCorrida(f"No existe la ejecución {id_ejecucion}.")
+    acc = acciones_corrida(s, ejec)
+    if not acc["puede_reanudar"]:
+        if acc["en_marcha"]:
+            raise ErrorCorrida(f"La corrida {id_ejecucion} ya está en marcha.")
+        if acc["bloqueado_por_otra"]:
+            raise ErrorCorrida(f"Ya hay una corrida en marcha ({acc['id_corrida_activa']}).")
+        raise ErrorCorrida(
+            "Esta corrida no se puede reanudar: no hay consultas pendientes "
+            "y el estado actual no lo permite."
+        )
+    _validar_relanzable(s, ejec)
+    reconciliar_corridas_activas(s, consultar_github=True)
+    s.commit()
+    _marcar_corrida_en_cola(ejec, solicitado_por)
+    s.flush()
+    inputs = {
+        "semestre": ejec.semestre,
+        "corte": (ejec.corte or "").lower(),
+        "run_id": id_ejecucion,
+        "modo": ejec.modo or "completa",
+        "ejecutado_por": solicitado_por,
+        "fase": "completa",
+    }
+    try:
+        _disparar_workflow_github(inputs)
+    except ErrorCorrida:
+        ejec.estado, ejec.errores = "fallida", "No se pudo reanudar en GitHub Actions."
+        s.commit()
+        raise
+    s.commit()
+    return ejec
+
+
+def reintentar_consolidacion_corrida(s: Session, id_ejecucion: str, solicitado_por: str) -> Ejecucion:
+    """Relanza corrida.yml con fase solo_consolidar (mismo run_id, presupuestos congelados)."""
+    ejec = s.get(Ejecucion, id_ejecucion)
+    if ejec is None:
+        raise ErrorCorrida(f"No existe la ejecución {id_ejecucion}.")
+    acc = acciones_corrida(s, ejec)
+    if not acc["puede_reintentar_consolidacion"]:
+        if acc["en_marcha"]:
+            raise ErrorCorrida(f"La corrida {id_ejecucion} ya está en marcha.")
+        if acc["bloqueado_por_otra"]:
+            raise ErrorCorrida(f"Ya hay una corrida en marcha ({acc['id_corrida_activa']}).")
+        if acc["consultas_pendientes"] > 0:
+            raise ErrorCorrida(
+                f"Aún hay {acc['consultas_pendientes']} consultas pendientes; "
+                "use «Reanudar corrida» para continuar la extracción."
+            )
+        raise ErrorCorrida(
+            "No se puede reintentar la consolidación: la extracción no terminó o el estado no lo permite."
+        )
+    _validar_relanzable(s, ejec)
+    reconciliar_corridas_activas(s, consultar_github=True)
+    s.commit()
+    _marcar_corrida_en_cola(ejec, solicitado_por)
+    s.flush()
+    inputs = {
+        "semestre": ejec.semestre,
+        "corte": (ejec.corte or "").lower(),
+        "run_id": id_ejecucion,
+        "modo": ejec.modo or "completa",
+        "ejecutado_por": solicitado_por,
+        "fase": "solo_consolidar",
+    }
+    try:
+        _disparar_workflow_github(inputs)
+    except ErrorCorrida:
+        ejec.estado, ejec.errores = "fallida", "No se pudo reintentar la consolidación en GitHub Actions."
+        s.commit()
+        raise
+    s.commit()
+    return ejec
+
+
 def lanzar(s: Session, semestre: str, corte: str, solicitado_por: str, modo: str = "completa") -> Ejecucion:
     """Registra la ejecución (en cola) y dispara el workflow con workflow_dispatch."""
     semestre, corte = normalizar_semestre(semestre), normalizar_corte(corte)
@@ -57,26 +240,25 @@ def lanzar(s: Session, semestre: str, corte: str, solicitado_por: str, modo: str
                                               Ejecucion.creado_en > ahora() - timedelta(hours=8))).first()
     if activa is not None:
         raise ErrorCorrida(f"Ya hay una corrida en marcha ({activa.id_ejecucion}). Espere a que termine antes de lanzar otra.")
-    cab = _cabeceras()
-    a = ajustes()
     id_ej = f"{semestre}-{corte.lower()}-{uuid.uuid4().hex[:6]}"
     ejec = Ejecucion(id_ejecucion=id_ej, semestre=semestre, corte=corte, ejecutado_por=solicitado_por, estado="en_cola",
                      modo=modo, ejecutor="github", fase="en_cola")
     s.add(ejec)
     s.flush()
+    inputs = {
+        "semestre": semestre,
+        "corte": corte.lower(),
+        "run_id": id_ej,
+        "modo": modo,
+        "ejecutado_por": solicitado_por,
+        "fase": "completa",
+    }
     try:
-        r = requests.post(f"{API}/repos/{a.github_repo}/actions/workflows/{a.github_workflow}/dispatches", headers=cab, timeout=20,
-                          json={"ref": a.github_ref, "inputs": {"semestre": semestre, "corte": corte.lower(), "run_id": id_ej,
-                                                                "modo": modo, "ejecutado_por": solicitado_por}})
-    except requests.RequestException as e:
-        ejec.estado, ejec.errores = "fallida", f"No hubo conexión con GitHub: {e}"
+        _disparar_workflow_github(inputs)
+    except ErrorCorrida as e:
+        ejec.estado, ejec.errores = "fallida", str(e)
         s.commit()
-        raise ErrorCorrida(ejec.errores) from e
-    if r.status_code not in (200, 204):
-        ejec.estado = "fallida"
-        ejec.errores = f"GitHub rechazó el lanzamiento (HTTP {r.status_code}): {r.text[:300]}. Revise GITHUB_TOKEN (permiso Actions: write) y GITHUB_WORKFLOW."
-        s.commit()
-        raise ErrorCorrida(ejec.errores)
+        raise
     s.commit()
     return ejec
 
@@ -118,7 +300,17 @@ def progreso(s: Session, ejec: Ejecucion, consultar_github: bool = False) -> dic
             if gh.get("estado") == "completed" and gh.get("conclusion") not in ("success", None):
                 salida["aviso"] = "El workflow de GitHub ya terminó con errores; si el estado no se actualiza, recargue en unos segundos."
     elif ejec.estado in ("fallida", "incompleta") and ejec.fase == "terminada":
-        salida["aviso"] = "La corrida terminó con errores. Puede lanzar una nueva corrida."
+        pend = contar_consultas_pendientes(s, ejec.id_ejecucion)
+        if pend:
+            salida["aviso"] = (
+                f"Quedaron {pend} consultas pendientes. Puede usar «Reanudar corrida» en esta pantalla "
+                "con el mismo id (continúa sin duplicar particiones hechas)."
+            )
+        else:
+            salida["aviso"] = (
+                "La corrida terminó con errores. Puede «Reintentar consolidación» si la extracción ya terminó, "
+                "o pedir ayuda a Desarrollo."
+            )
     return salida
 
 

@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { api } from "../api";
 import { Aviso, Cargando, EstadoChip, Titulo, useDatos } from "../componentes/ui";
 
 export type Progreso = {
@@ -20,7 +21,109 @@ export type Ejecucion = {
   presupuesto_carreras?: Record<string, number> | null;
   logro_extraccion?: { objetivo?: number; por_fuente?: Record<string, number>; por_carrera?: Record<string, number> } | null;
   progreso?: Progreso;
+  acciones?: AccionesCorrida;
 };
+
+export type AccionesCorrida = {
+  consultas_pendientes: number;
+  en_marcha: boolean;
+  bloqueado_por_otra: boolean;
+  id_corrida_activa?: string | null;
+  puede_reanudar: boolean;
+  puede_reintentar_consolidacion: boolean;
+};
+
+export function AccionesCorridaPanel({
+  id,
+  acciones,
+  onActualizado,
+}: {
+  id: string;
+  acciones?: AccionesCorrida;
+  onActualizado: () => void;
+}) {
+  const [cargando, setCargando] = useState<"reanudar" | "consolidar" | null>(null);
+  const [aviso, setAviso] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+
+  if (!acciones) return null;
+  if (acciones.en_marcha) {
+    return (
+      <p className="text-sm text-texto-suave">Esta corrida está en marcha; las acciones de reintento aparecerán al terminar.</p>
+    );
+  }
+  if (acciones.bloqueado_por_otra) {
+    return (
+      <Aviso tipo="alerta">
+        Hay otra corrida en marcha ({acciones.id_corrida_activa}). Espere a que termine antes de reanudar esta.
+      </Aviso>
+    );
+  }
+  if (!acciones.puede_reanudar && !acciones.puede_reintentar_consolidacion) return null;
+
+  const reanudar = async () => {
+    const n = acciones.consultas_pendientes;
+    const msg = n
+      ? `¿Reanudar la corrida ${id}? Quedan ${n} consultas pendientes; se usará el mismo id y no se repetirán las ya hechas.`
+      : `¿Reanudar la corrida ${id} con el mismo id?`;
+    if (!confirm(msg)) return;
+    setCargando("reanudar");
+    setAviso(null);
+    try {
+      await api.post(`/corridas/${id}/reanudar`, {});
+      setAviso({ tipo: "ok", texto: "La corrida se envió a GitHub Actions. El progreso se actualizará en unos segundos." });
+      onActualizado();
+    } catch (e) {
+      setAviso({ tipo: "error", texto: (e as Error).message });
+    } finally {
+      setCargando(null);
+    }
+  };
+
+  const consolidar = async () => {
+    if (
+      !confirm(
+        `¿Reintentar solo la consolidación de ${id}? No volverá a extraer ofertas; procesará las crudas ya guardadas.`
+      )
+    ) {
+      return;
+    }
+    setCargando("consolidar");
+    setAviso(null);
+    try {
+      await api.post(`/corridas/${id}/reintentar-consolidacion`, {});
+      setAviso({ tipo: "ok", texto: "La consolidación se envió a GitHub Actions." });
+      onActualizado();
+    } catch (e) {
+      setAviso({ tipo: "error", texto: (e as Error).message });
+    } finally {
+      setCargando(null);
+    }
+  };
+
+  return (
+    <div className="tarjeta space-y-3">
+      <h2 className="font-semibold">Continuar o reintentar</h2>
+      {acciones.consultas_pendientes > 0 && (
+        <p className="text-sm text-texto-suave">
+          Consultas pendientes: <strong>{acciones.consultas_pendientes}</strong>
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {acciones.puede_reanudar && (
+          <button type="button" className="btn" disabled={!!cargando} onClick={reanudar}>
+            {cargando === "reanudar" ? "Enviando…" : "Reanudar corrida"}
+          </button>
+        )}
+        {acciones.puede_reintentar_consolidacion && (
+          <button type="button" className="btn-sec" disabled={!!cargando} onClick={consolidar}>
+            {cargando === "consolidar" ? "Enviando…" : "Reintentar consolidación"}
+          </button>
+        )}
+      </div>
+      {aviso && <Aviso tipo={aviso.tipo === "ok" ? "ok" : "error"}>{aviso.texto}</Aviso>}
+    </div>
+  );
+}
 
 export function duracion(seg: number) {
   const h = Math.floor(seg / 3600), m = Math.floor((seg % 3600) / 60);
@@ -134,6 +237,7 @@ function Detalle({ id }: { id: string }) {
   return (
     <div className="space-y-4">
       <Titulo extra={<Link className="btn-sec" to="/ejecuciones">Volver</Link>}>Ejecución {datos.id_ejecucion}</Titulo>
+      <AccionesCorridaPanel id={datos.id_ejecucion} acciones={datos.acciones} onActualizado={recargar} />
       {datos.progreso && <PanelProgreso p={datos.progreso} />}
       <Reporte e={datos} />
     </div>
@@ -151,12 +255,21 @@ export default function Ejecuciones() {
       <Titulo>Ejecuciones y reportes</Titulo>
       <div className="tarjeta overflow-x-auto">
         <table className="tabla">
-          <thead><tr><th>Ejecución</th><th>Fecha</th><th>Corte</th><th>Estado</th><th>Encontradas</th><th>Guardadas</th><th>Duplicados</th><th>Total corte</th><th>Duración</th></tr></thead>
+          <thead><tr><th>Ejecución</th><th>Fecha</th><th>Corte</th><th>Estado</th><th>Pend.</th><th>Encontradas</th><th>Guardadas</th><th>Duplicados</th><th>Total corte</th><th>Duración</th></tr></thead>
           <tbody>
             {datos.map((e) => (
               <tr key={e.id_ejecucion}>
-                <td><Link className="text-institucional font-semibold underline" to={`/ejecuciones/${e.id_ejecucion}`}>{e.id_ejecucion}</Link></td>
+                <td>
+                  <Link className="text-institucional font-semibold underline" to={`/ejecuciones/${e.id_ejecucion}`}>{e.id_ejecucion}</Link>
+                  {e.acciones?.puede_reanudar && !e.acciones.en_marcha && (
+                    <span className="ml-1 text-xs text-institucional">· reanudar</span>
+                  )}
+                  {e.acciones?.puede_reintentar_consolidacion && !e.acciones.en_marcha && (
+                    <span className="ml-1 text-xs text-texto-suave">· consolidar</span>
+                  )}
+                </td>
                 <td>{e.fecha}</td><td>{e.semestre} · {e.corte}</td><td><EstadoChip estado={e.estado} /></td>
+                <td>{e.acciones?.consultas_pendientes ?? "—"}</td>
                 <td>{e.ofertas_encontradas}</td><td>{e.ofertas_guardadas}</td><td>{e.duplicados_eliminados}</td><td>{e.total_corte}</td>
                 <td>{duracion(e.duracion_segundos || 0)}</td>
               </tr>

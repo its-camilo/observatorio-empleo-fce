@@ -51,23 +51,49 @@ def lanzar_corrida(d: LanzarIn, u: Usuario = Depends(solo_admin), s: Session = D
 
 @router.get("/corridas")
 def listar_corridas(_: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
-    from observatorio.corridas import ejecucion_dict, reconciliar_corridas_activas
+    from observatorio.corridas import acciones_corrida, ejecucion_dict, reconciliar_corridas_activas
 
     filas = list(s.scalars(select(Ejecucion).order_by(Ejecucion.creado_en.desc()).limit(100)))
     if reconciliar_corridas_activas(s, consultar_github=True):
         s.commit()
         filas = list(s.scalars(select(Ejecucion).order_by(Ejecucion.creado_en.desc()).limit(100)))
-    return [ejecucion_dict(e) for e in filas]
+    return [{**ejecucion_dict(e), "acciones": acciones_corrida(s, e)} for e in filas]
 
 
 @router.get("/corridas/{id_ejecucion}")
 def ver_corrida(id_ejecucion: str, _: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
-    from observatorio.corridas import ejecucion_dict, progreso
+    from observatorio.corridas import acciones_corrida, ejecucion_dict, progreso
 
     e = s.get(Ejecucion, id_ejecucion)
     if e is None:
         raise HTTPException(404, "Ejecución no encontrada")
-    return {**ejecucion_dict(e), "progreso": progreso(s, e, consultar_github=True)}
+    return {
+        **ejecucion_dict(e),
+        "progreso": progreso(s, e, consultar_github=True),
+        "acciones": acciones_corrida(s, e),
+    }
+
+
+@router.post("/corridas/{id_ejecucion}/reanudar")
+def reanudar_corrida_api(id_ejecucion: str, u: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
+    from observatorio.corridas import ErrorCorrida, acciones_corrida, ejecucion_dict, reanudar_corrida
+
+    try:
+        e = reanudar_corrida(s, id_ejecucion, u.email)
+    except (ErrorCorrida, ValueError) as ex:
+        raise HTTPException(400, str(ex)) from ex
+    return {**ejecucion_dict(e), "acciones": acciones_corrida(s, e)}
+
+
+@router.post("/corridas/{id_ejecucion}/reintentar-consolidacion")
+def reintentar_consolidacion_api(id_ejecucion: str, u: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
+    from observatorio.corridas import ErrorCorrida, acciones_corrida, ejecucion_dict, reintentar_consolidacion_corrida
+
+    try:
+        e = reintentar_consolidacion_corrida(s, id_ejecucion, u.email)
+    except (ErrorCorrida, ValueError) as ex:
+        raise HTTPException(400, str(ex)) from ex
+    return {**ejecucion_dict(e), "acciones": acciones_corrida(s, e)}
 
 
 # ----------------------------------------------------------------- ofertas
