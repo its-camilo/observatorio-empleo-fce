@@ -37,7 +37,9 @@ Cada corrida se marca con **semestre** (ej. 2026-II) y **corte** (inicio, mitad 
 de GitHub alcanzó el límite de tiempo. En **Ejecuciones y reportes**, abra el detalle de la corrida:
 - **Reanudar corrida** (mismo id): continúa consultas pendientes sin repetir las ya hechas.
 - **Reintentar consolidación**: si la extracción ya terminó pero falló el procesamiento o los cursos, relanza solo esa fase.
-Ambos botones piden confirmación y muestran cuántas consultas quedan pendientes cuando aplica.
+- **Terminar corrida**: omite las consultas pendientes (queda constancia en el reporte) y cierra la ejecución con los datos
+  ya extraídos; si aún falta consolidar, lanza solo esa fase en GitHub Actions. No se puede deshacer.
+Los tres botones piden confirmación y muestran cuántas consultas quedan pendientes cuando aplica.
 
 ## 4. Revisar el reporte (Ejecuciones y reportes)
 

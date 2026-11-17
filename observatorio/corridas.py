@@ -35,6 +35,7 @@ __all__ = [
     "reconciliar_corridas_activas",
     "reconciliar_ejecucion",
     "reintentar_consolidacion_corrida",
+    "terminar_corrida",
 ]
 
 
@@ -117,8 +118,46 @@ def _validar_relanzable(s: Session, ejec: Ejecucion) -> None:
         )
 
 
+_MOTIVO_OMITIDA_MANUAL = "Omitida al terminar la corrida manualmente desde el aplicativo."
+
+
+def _omitir_particiones_pendientes(s: Session, id_ejecucion: str) -> int:
+    pendientes = list(
+        s.scalars(
+            select(Particion).where(
+                Particion.id_ejecucion == id_ejecucion,
+                Particion.estado == "pendiente",
+            )
+        )
+    )
+    for p in pendientes:
+        p.estado = "omitida"
+        p.error = _MOTIVO_OMITIDA_MANUAL
+    return len(pendientes)
+
+
+def _registrar_omision_manual(ejec: Ejecucion, solicitado_por: str, n: int) -> None:
+    fecha = ahora().strftime("%Y-%m-%d %H:%M UTC")
+    linea = f"Se omitieron {n} consultas pendientes por decisión de {solicitado_por} el {fecha}."
+    det = list(ejec.errores_detalle or [])
+    if linea not in det:
+        det.append(linea)
+    ejec.errores_detalle = det
+    ejec.errores = "\n".join(det)
+
+
 def acciones_corrida(s: Session, ejec: Ejecucion) -> dict:
     """Indicadores para la UI: reanudar extracción vs reintentar solo consolidación."""
+    if ejec.estado == "terminada_manual":
+        return {
+            "consultas_pendientes": 0,
+            "en_marcha": False,
+            "bloqueado_por_otra": False,
+            "id_corrida_activa": None,
+            "puede_reanudar": False,
+            "puede_reintentar_consolidacion": False,
+            "puede_terminar": False,
+        }
     pend = contar_consultas_pendientes(s, ejec.id_ejecucion)
     en_marcha = ejec.estado in ("en_cola", "en_curso")
     otra = _corrida_activa(s, excluir_id=ejec.id_ejecucion) if not en_marcha else None
@@ -139,6 +178,7 @@ def acciones_corrida(s: Session, ejec: Ejecucion) -> dict:
             or (ejec.estado in ("incompleta", "fallida") and not puede_reintentar)
         )
     )
+    puede_terminar = puede_reanudar or puede_reintentar
     return {
         "consultas_pendientes": pend,
         "en_marcha": en_marcha,
@@ -146,6 +186,7 @@ def acciones_corrida(s: Session, ejec: Ejecucion) -> dict:
         "id_corrida_activa": otra.id_ejecucion if otra else None,
         "puede_reanudar": puede_reanudar,
         "puede_reintentar_consolidacion": puede_reintentar,
+        "puede_terminar": puede_terminar,
     }
 
 
@@ -229,6 +270,60 @@ def reintentar_consolidacion_corrida(s: Session, id_ejecucion: str, solicitado_p
     return ejec
 
 
+def terminar_corrida(s: Session, id_ejecucion: str, solicitado_por: str) -> Ejecucion:
+    """Omite consultas pendientes y cierra la corrida (consolidación final si hace falta)."""
+    ejec = s.get(Ejecucion, id_ejecucion)
+    if ejec is None:
+        raise ErrorCorrida(f"No existe la ejecución {id_ejecucion}.")
+    acc = acciones_corrida(s, ejec)
+    if not acc["puede_terminar"]:
+        if acc["en_marcha"]:
+            raise ErrorCorrida(f"La corrida {id_ejecucion} ya está en marcha.")
+        if acc["bloqueado_por_otra"]:
+            raise ErrorCorrida(f"Ya hay una corrida en marcha ({acc['id_corrida_activa']}).")
+        raise ErrorCorrida("Esta corrida no se puede terminar manualmente en su estado actual.")
+    _validar_relanzable(s, ejec)
+
+    n_omitidas = _omitir_particiones_pendientes(s, id_ejecucion)
+    _registrar_omision_manual(ejec, solicitado_por, n_omitidas)
+    params = dict(ejec.parametros or {})
+    params["terminacion_manual"] = {
+        "por": solicitado_por,
+        "consultas_omitidas": n_omitidas,
+        "en": ahora().isoformat(),
+    }
+    ejec.parametros = params
+
+    if ejec.fase == "terminada":
+        ejec.estado = "terminada_manual"
+        ejec.ejecutado_por = solicitado_por
+        if ejec.fin is None:
+            ejec.fin = ahora()
+        s.commit()
+        return ejec
+
+    reconciliar_corridas_activas(s, consultar_github=True)
+    s.commit()
+    _marcar_corrida_en_cola(ejec, solicitado_por)
+    s.flush()
+    inputs = {
+        "semestre": ejec.semestre,
+        "corte": (ejec.corte or "").lower(),
+        "run_id": id_ejecucion,
+        "modo": ejec.modo or "completa",
+        "ejecutado_por": solicitado_por,
+        "fase": "solo_consolidar",
+    }
+    try:
+        _disparar_workflow_github(inputs)
+    except ErrorCorrida:
+        ejec.estado, ejec.errores = "fallida", "No se pudo lanzar la consolidación al terminar la corrida manualmente."
+        s.commit()
+        raise
+    s.commit()
+    return ejec
+
+
 def lanzar(s: Session, semestre: str, corte: str, solicitado_por: str, modo: str = "completa") -> Ejecucion:
     """Registra la ejecución (en cola) y dispara el workflow con workflow_dispatch."""
     semestre, corte = normalizar_semestre(semestre), normalizar_corte(corte)
@@ -283,7 +378,7 @@ def progreso(s: Session, ejec: Ejecucion, consultar_github: bool = False) -> dic
     crudas = s.scalar(select(func.count()).select_from(OfertaCruda).where(OfertaCruda.id_ejecucion == ejec.id_ejecucion)) or 0
     procesadas = s.scalar(select(func.count()).select_from(OfertaCruda).where(
         OfertaCruda.id_ejecucion == ejec.id_ejecucion, OfertaCruda.procesada.is_(True))) or 0
-    if ejec.estado in ("completada", "incompleta", "fallida"):
+    if ejec.estado in ("completada", "incompleta", "fallida", "terminada_manual"):
         pct = 100
     elif tot["total"]:
         pct = int(85 * (tot["hechas"] + tot["error"]) / tot["total"] + (10 * procesadas / crudas if crudas else 0))

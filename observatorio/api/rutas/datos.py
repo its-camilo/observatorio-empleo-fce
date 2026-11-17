@@ -96,6 +96,17 @@ def reintentar_consolidacion_api(id_ejecucion: str, u: Usuario = Depends(solo_ad
     return {**ejecucion_dict(e), "acciones": acciones_corrida(s, e)}
 
 
+@router.post("/corridas/{id_ejecucion}/terminar")
+def terminar_corrida_api(id_ejecucion: str, u: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
+    from observatorio.corridas import ErrorCorrida, acciones_corrida, ejecucion_dict, terminar_corrida
+
+    try:
+        e = terminar_corrida(s, id_ejecucion, u.email)
+    except (ErrorCorrida, ValueError) as ex:
+        raise HTTPException(400, str(ex)) from ex
+    return {**ejecucion_dict(e), "acciones": acciones_corrida(s, e)}
+
+
 # ----------------------------------------------------------------- ofertas
 @router.get("/ofertas")
 def ofertas(semestre: str | None = None, corte: str | None = None, carrera: str | None = None, fuente: str | None = None,
