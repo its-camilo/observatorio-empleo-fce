@@ -2,12 +2,13 @@ import { useState } from "react";
 import { api } from "../api";
 import { useEsAdmin } from "../main";
 import EditorDistribucion from "../componentes/EditorDistribucion";
+import EditorNivelesExperiencia from "../componentes/EditorNivelesExperiencia";
 import { Aviso, Cargando, Titulo, useDatos } from "../componentes/ui";
 
 type Param = { clave: string; valor: unknown; descripcion: string };
 
 const FUENTES_ORDEN = ["linkedin", "indeed", "computrabajo"];
-const OCULTOS_JSON = new Set(["distribucion_fuentes", "distribucion_carreras"]);
+const OCULTOS_JSON = new Set(["distribucion_fuentes", "distribucion_carreras", "niveles_experiencia"]);
 
 function Editor({ p, admin, alGuardar }: { p: Param; admin: boolean; alGuardar: () => void }) {
   const [texto, setTexto] = useState(JSON.stringify(p.valor, null, 2));
@@ -77,6 +78,15 @@ export default function Configuracion() {
         admin={admin}
         alGuardar={recargar}
       />
+
+      {mapa.niveles_experiencia && (
+        <EditorNivelesExperiencia
+          descripcion={mapa.niveles_experiencia.descripcion}
+          valorInicial={mapa.niveles_experiencia.valor}
+          admin={admin}
+          alGuardar={recargar}
+        />
+      )}
 
       {datos
         .filter((p) => !OCULTOS_JSON.has(p.clave))

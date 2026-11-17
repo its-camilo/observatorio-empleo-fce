@@ -1,6 +1,7 @@
 """Cupos de ofertas guardadas (finales) por fuente, carrera y celda fuente×carrera."""
 from __future__ import annotations
 
+import copy
 from collections import Counter
 
 from sqlalchemy import func, select
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from observatorio.filtro_ofertas import oferta_incluida_en_resultados
 from observatorio.normas_corrida import NOMBRES_FUENTE
+from observatorio.pipeline.nivel_experiencia import normalizar_config_niveles
 from observatorio.plan_extraccion import presupuesto_fuente_carrera, presupuesto_por_carrera, presupuesto_por_fuente
 
 FUENTE_INV = {v: k for k, v in NOMBRES_FUENTE.items()}
@@ -183,8 +185,9 @@ class ControlCuposGuardadas:
 
 def construir_presupuestos_preparar(cfg: dict, meta_guardadas: int, fuentes: list[str]) -> dict:
     """Presupuestos congelados: metas de guardadas + extracción escalada."""
+    niveles_snap = copy.deepcopy(normalizar_config_niveles(cfg.get("niveles_experiencia")))
     if meta_guardadas <= 0 or not fuentes:
-        return {}
+        return {"niveles_experiencia": niveles_snap}
     presu_g_f = presupuesto_por_fuente(meta_guardadas, fuentes, cfg)
     presu_g_c = presupuesto_por_carrera(meta_guardadas, cfg)
     presu_g_fc = presupuesto_fuente_carrera(presu_g_f, cfg)
@@ -200,6 +203,7 @@ def construir_presupuestos_preparar(cfg: dict, meta_guardadas: int, fuentes: lis
         "presupuesto_carreras": ext_c,
         "presupuesto_fuente_carrera": ext_fc,
         "factor_extraccion_crudas": factor,
+        "niveles_experiencia": niveles_snap,
     }
 
 

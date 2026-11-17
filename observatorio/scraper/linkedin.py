@@ -118,6 +118,9 @@ class LinkedIn:
         for inicio in range(0, c.max_resultados, 10):
             url = (f"{URL_BUSQUEDA}?keywords={quote(c.termino)}&location={quote(c.ubicacion)}"
                    f"&f_TPR=r{segundos}&start={inicio}" + ("&f_WT=2" if c.remoto else ""))
+            fe = c.opciones.get("linkedin_f_e")
+            if fe:
+                url += f"&{fe}"
             r = self.http.get(url)
             if r is None or not r.text.strip():
                 break

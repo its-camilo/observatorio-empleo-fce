@@ -27,6 +27,7 @@ from observatorio.pipeline.software import DetectorSoftware
 from observatorio.pipeline.valor_formativo import oferta_tiene_valor_formativo, tiene_descripcion_util
 from observatorio.capitales import es_capital_departamental
 from observatorio.cupos_guardadas import ControlCuposGuardadas, presupuestos_guardadas
+from observatorio.pipeline.nivel_experiencia import nivel_permitido, niveles_efectivos
 from observatorio.texto import es_colombia, normalizar_clave
 
 log = logging.getLogger("observatorio.procesar")
@@ -42,6 +43,7 @@ class ResultadoProceso:
     fuera_de_capital: int = 0
     fuera_de_ventana: int = 0
     filtradas_tipo: int = 0
+    filtradas_nivel: int = 0
     duplicados: int = 0
     actualizadas: int = 0
     no_relevantes: int = 0
@@ -53,8 +55,8 @@ class ResultadoProceso:
     ejemplo_nc: dict = field(default_factory=dict)
 
     def sumar(self, otro: "ResultadoProceso") -> None:
-        for k in ("crudas", "fuera_de_colombia", "fuera_de_capital", "fuera_de_ventana", "filtradas_tipo", "duplicados",
-                  "actualizadas", "no_relevantes", "guardadas", "por_respaldo", "excedente_cupo"):
+        for k in ("crudas", "fuera_de_colombia", "fuera_de_capital", "fuera_de_ventana", "filtradas_tipo", "filtradas_nivel",
+                  "duplicados", "actualizadas", "no_relevantes", "guardadas", "por_respaldo", "excedente_cupo"):
             setattr(self, k, getattr(self, k) + getattr(otro, k))
 
 
@@ -78,6 +80,8 @@ class Procesador:
         self.tipo = (cfg.get("tipo_oferta") or "ambas").lower()
         self.requiere_formativo = bool(cfg.get("requiere_software_o_habilidad", True))
         self.solo_capitales = bool(cfg.get("solo_capitales_departamento", True))
+        ne_cfg = (ejec.parametros or {}).get("niveles_experiencia", cfg.get("niveles_experiencia"))
+        self._niveles_permitidos = niveles_efectivos(ne_cfg)
         self.total = ResultadoProceso()
         params = ejec.parametros or {}
         pf, pc, pfc = presupuestos_guardadas(params, cfg)
@@ -175,6 +179,9 @@ class Procesador:
             if self.tipo == "practica" and not f["tipo_oferta"].startswith("Práctica") or \
                     self.tipo == "empleo" and f["tipo_oferta"].startswith("Práctica"):
                 r.filtradas_tipo += 1
+                continue
+            if not nivel_permitido(f.get("nivel_experiencia"), self._niveles_permitidos):
+                r.filtradas_nivel += 1
                 continue
             filas.append(f)
 
