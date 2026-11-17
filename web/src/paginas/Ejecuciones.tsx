@@ -31,6 +31,7 @@ export type AccionesCorrida = {
   id_corrida_activa?: string | null;
   puede_reanudar: boolean;
   puede_reintentar_consolidacion: boolean;
+  puede_terminar: boolean;
 };
 
 export function AccionesCorridaPanel({
@@ -42,7 +43,7 @@ export function AccionesCorridaPanel({
   acciones?: AccionesCorrida;
   onActualizado: () => void;
 }) {
-  const [cargando, setCargando] = useState<"reanudar" | "consolidar" | null>(null);
+  const [cargando, setCargando] = useState<"reanudar" | "consolidar" | "terminar" | null>(null);
   const [aviso, setAviso] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
   if (!acciones) return null;
@@ -58,7 +59,7 @@ export function AccionesCorridaPanel({
       </Aviso>
     );
   }
-  if (!acciones.puede_reanudar && !acciones.puede_reintentar_consolidacion) return null;
+  if (!acciones.puede_reanudar && !acciones.puede_reintentar_consolidacion && !acciones.puede_terminar) return null;
 
   const reanudar = async () => {
     const n = acciones.consultas_pendientes;
@@ -71,6 +72,33 @@ export function AccionesCorridaPanel({
     try {
       await api.post(`/corridas/${id}/reanudar`, {});
       setAviso({ tipo: "ok", texto: "La corrida se envió a GitHub Actions. El progreso se actualizará en unos segundos." });
+      onActualizado();
+    } catch (e) {
+      setAviso({ tipo: "error", texto: (e as Error).message });
+    } finally {
+      setCargando(null);
+    }
+  };
+
+  const terminar = async () => {
+    const n = acciones.consultas_pendientes;
+    const msg =
+      n > 0
+        ? `¿Terminar la corrida ${id} omitiendo ${n} consulta(s) pendiente(s)? ` +
+          "No podrá deshacer esta acción ni recuperar esas consultas; se consolidará lo ya extraído si corresponde."
+        : `¿Terminar la corrida ${id} sin volver a extraer? Consolidará los datos ya recolectados si aún no se había hecho.`;
+    if (!confirm(msg)) return;
+    setCargando("terminar");
+    setAviso(null);
+    try {
+      await api.post(`/corridas/${id}/terminar`, {});
+      setAviso({
+        tipo: "ok",
+        texto:
+          n > 0
+            ? `Se omitieron ${n} consultas pendientes. La corrida quedó cerrada o en consolidación final.`
+            : "La corrida se envió a consolidación final o quedó marcada como finalizada.",
+      });
       onActualizado();
     } catch (e) {
       setAviso({ tipo: "error", texto: (e as Error).message });
@@ -117,6 +145,11 @@ export function AccionesCorridaPanel({
         {acciones.puede_reintentar_consolidacion && (
           <button type="button" className="btn-sec" disabled={!!cargando} onClick={consolidar}>
             {cargando === "consolidar" ? "Enviando…" : "Reintentar consolidación"}
+          </button>
+        )}
+        {acciones.puede_terminar && (
+          <button type="button" className="btn-peligro" disabled={!!cargando} onClick={terminar}>
+            {cargando === "terminar" ? "Procesando…" : "Terminar corrida"}
           </button>
         )}
       </div>
@@ -266,6 +299,9 @@ export default function Ejecuciones() {
                   )}
                   {e.acciones?.puede_reintentar_consolidacion && !e.acciones.en_marcha && (
                     <span className="ml-1 text-xs text-texto-suave">· consolidar</span>
+                  )}
+                  {e.acciones?.puede_terminar && !e.acciones.en_marcha && (
+                    <span className="ml-1 text-xs text-marina/70">· terminar</span>
                   )}
                 </td>
                 <td>{e.fecha}</td><td>{e.semestre} · {e.corte}</td><td><EstadoChip estado={e.estado} /></td>

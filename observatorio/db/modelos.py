@@ -38,7 +38,7 @@ class Ejecucion(Base):
     duplicados_eliminados: Mapped[int] = mapped_column(Integer, default=0)
     errores: Mapped[str | None] = mapped_column(Text)
     # --- interno / reporte ---
-    estado: Mapped[str] = mapped_column(String(20), default="en_cola")  # en_cola, en_curso, completada, incompleta, fallida
+    estado: Mapped[str] = mapped_column(String(20), default="en_cola")  # en_cola, en_curso, completada, incompleta, fallida, terminada_manual
     modo: Mapped[str] = mapped_column(String(20), default="completa")  # completa, prueba
     # github: GitHub Actions (aplicativo o MCP) | local: CLI en un computador (si la IP del servidor está bloqueada)
     ejecutor: Mapped[str] = mapped_column(String(20), default="github", index=True)

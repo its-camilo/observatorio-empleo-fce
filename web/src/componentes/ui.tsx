@@ -85,6 +85,7 @@ export function Barras({ datos, sufijo = "" }: { datos: { etiqueta: string; valo
 export function EstadoChip({ estado }: { estado: string }) {
   const c: Record<string, string> = {
     completada: "bg-acento/30 text-marina border-acento/50",
+    terminada_manual: "bg-acento/20 text-marina border-acento/40",
     incompleta: "bg-destacado/30 text-marina border-destacado/60",
     fallida: "bg-crema text-marina border-marina/30",
     en_curso: "bg-institucional/20 text-marina border-institucional",
@@ -96,6 +97,7 @@ export function EstadoChip({ estado }: { estado: string }) {
     fallida: "fallida",
     incompleta: "incompleta",
     completada: "completada",
+    terminada_manual: "finalizada (consultas omitidas)",
   };
   return (
     <span className={`rounded-boton border px-2.5 py-0.5 text-xs font-bold uppercase ${c[estado] || "bg-niebla/40"}`}>

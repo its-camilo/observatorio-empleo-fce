@@ -119,6 +119,73 @@ def test_reintentar_rechaza_con_pendientes(cliente, sesion):
     assert "consultas pendientes" in r.json()["detail"].lower()
 
 
+def test_terminar_marca_omitida_y_estado_manual(cliente, sesion):
+    _ejec_incompleta(sesion, "ec-fin", pendientes=3)
+    H = _headers_admin(cliente)
+    r = cliente.post("/api/corridas/ec-fin/terminar", headers=H)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["estado"] == "terminada_manual"
+    assert data["acciones"]["puede_terminar"] is False
+    from sqlalchemy import select
+
+    from observatorio.db.modelos import Particion
+
+    omitidas = list(
+        sesion.scalars(select(Particion).where(Particion.id_ejecucion == "ec-fin", Particion.estado == "omitida"))
+    )
+    assert len(omitidas) == 3
+    assert any("Se omitieron 3 consultas" in (x or "") for x in (data.get("errores_detalle") or []))
+
+
+def test_terminar_sin_consolidacion_previa_dispara_solo_consolidar(cliente, sesion, monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_prueba")
+    monkeypatch.setenv("GITHUB_REPO", "its-camilo/observatorio-empleo-fce")
+    llamadas = []
+
+    class Resp:
+        status_code = 204
+        text = ""
+
+    monkeypatch.setattr(corr.requests, "post", lambda url, **kw: llamadas.append(kw["json"]) or Resp())
+    ej = Ejecucion(
+        id_ejecucion="ec-pre",
+        semestre="2026-II",
+        corte="Mitad",
+        ejecutado_por="test@unal.edu.co",
+        estado="fallida",
+        fase="procesando",
+        modo="completa",
+        ejecutor="github",
+    )
+    sesion.add(ej)
+    sesion.add(
+        OfertaCruda(
+            id_ejecucion="ec-pre",
+            fuente="LinkedIn",
+            id_fuente="c1",
+            termino="excel",
+            carrera_termino="Economía",
+            ubicacion="Bogotá",
+            datos={},
+        )
+    )
+    sesion.commit()
+    H = _headers_admin(cliente)
+    r = cliente.post("/api/corridas/ec-pre/terminar", headers=H)
+    assert r.status_code == 200
+    assert r.json()["estado"] == "en_cola"
+    assert llamadas[0]["inputs"]["fase"] == "solo_consolidar"
+    assert llamadas[0]["inputs"]["run_id"] == "ec-pre"
+
+
+def test_terminar_rechaza_si_completada(cliente, sesion):
+    _ejec_incompleta(sesion, "ec-ok2", pendientes=0, estado="completada")
+    H = _headers_admin(cliente)
+    r = cliente.post("/api/corridas/ec-ok2/terminar", headers=H)
+    assert r.status_code == 400
+
+
 def test_reanudar_rechaza_si_otra_corrida_activa(cliente, sesion, monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "ghp_prueba")
     monkeypatch.setenv("GITHUB_REPO", "its-camilo/observatorio-empleo-fce")
