@@ -44,6 +44,7 @@ from observatorio.cupos_guardadas import (
     presupuestos_guardadas,
 )
 from observatorio.filtro_ofertas import oferta_incluida_en_resultados
+from observatorio.pipeline.nivel_experiencia import linkedin_query_f_e, niveles_efectivos, normalizar_config_niveles
 from observatorio.proporciones_finales import aplicar_tras_consolidar
 
 log = logging.getLogger("observatorio.corrida")
@@ -208,6 +209,7 @@ def preparar(
                 "presupuesto_fuentes": presupuesto,
                 "presupuesto_carreras": presupuesto_carreras,
                 "presupuesto_fuente_carrera": presupuesto_fuente_carrera(presupuesto, cfg),
+                "niveles_experiencia": normalizar_config_niveles(cfg.get("niveles_experiencia")),
             }
         ejec.fuentes = ", ".join(NOMBRES_FUENTE[f] for f in activas)
         terminos = list(s.scalars(select(TerminoBusqueda).where(TerminoBusqueda.activo.is_(True), TerminoBusqueda.tipo == "principal")
@@ -447,8 +449,25 @@ def extraer(s: Session, id_ejecucion: str, fuente: str, fragmento: int = 0, frag
         ) if cupo_fuente else max_part
         restante_carrera = (cupo_carrera - crudas_carrera(p.carrera)) if cupo_carrera else max_part
         max_res = max(1, min(max_part, restante_global, restante_fuente, restante_carrera))
-        c = Consulta(fuente=fuente, termino=p.termino, ubicacion=lugar, nombre_ubicacion=nombre_u, carrera=p.carrera,
-                     remoto=bool(remoto), max_resultados=max_res, ventana_dias=int(cfg.get("ventana_dias", 30)))
+        params = ejec.parametros or {}
+        ne_raw = params.get("niveles_experiencia", cfg.get("niveles_experiencia"))
+        permitidos = niveles_efectivos(normalizar_config_niveles(ne_raw))
+        opciones: dict = {}
+        if fuente == "linkedin":
+            fe = linkedin_query_f_e(permitidos)
+            if fe:
+                opciones["linkedin_f_e"] = fe
+        c = Consulta(
+            fuente=fuente,
+            termino=p.termino,
+            ubicacion=lugar,
+            nombre_ubicacion=nombre_u,
+            carrera=p.carrera,
+            remoto=bool(remoto),
+            max_resultados=max_res,
+            ventana_dias=int(cfg.get("ventana_dias", 30)),
+            opciones=opciones,
+        )
         p.intentos += 1
         conocidos |= ids_crudas_ejecucion_fuente(s, id_ejecucion, nombre)
         n = 0
@@ -765,6 +784,7 @@ def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:
             "modo": "reglas_deterministas",
             "dudosas_respaldo": previo.get("dudosas_respaldo", 0) + t.por_respaldo,
             "excedente_cupo": previo.get("excedente_cupo", 0) + t.excedente_cupo,
+            "filtradas_nivel": previo.get("filtradas_nivel", 0) + t.filtradas_nivel,
         }
     # Duplicados = repetidas en el procesamiento + ya conocidas al extraer (no se pidió su detalle)
     ejec.duplicados_eliminados = (ejec.duplicados_proceso or 0) + omitidas

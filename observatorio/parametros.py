@@ -47,6 +47,21 @@ POR_DEFECTO: dict[str, dict[str, Any]] = {
     },
     "ventana_dias": {"valor": 30, "descripcion": "Solo ofertas publicadas en los últimos N días."},
     "tipo_oferta": {"valor": "ambas", "descripcion": "practica, empleo o ambas."},
+    "niveles_experiencia": {
+        "valor": {
+            "modo": "todos",
+            "niveles": [
+                "Practicante",
+                "Sin experiencia / Junior",
+                "Intermedio",
+                "Senior",
+                "Directivo",
+                "No especificado",
+            ],
+        },
+        "descripcion": "Niveles de experiencia que se buscan y guardan. Modo «todos» = sin filtro. "
+                       "Modo «algunos» = solo los niveles marcados (las demás ofertas se descartan al procesar).",
+    },
     "objetivo_ofertas_corrida": {
         "valor": 10000,
         "descripcion": "Número de ofertas crudas a recolectar en cada corrida. El orquestador reparte este cupo según "
