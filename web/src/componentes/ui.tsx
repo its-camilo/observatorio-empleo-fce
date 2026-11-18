@@ -66,7 +66,7 @@ export function Barras({ datos, sufijo = "" }: { datos: { etiqueta: string; valo
     <div className="space-y-2">
       {datos.map((d) => (
         <div key={d.etiqueta} className="flex items-center gap-2 text-sm">
-          <div className="w-44 shrink-0 truncate text-marina" title={d.etiqueta}>
+          <div className="w-24 shrink-0 truncate text-marina sm:w-44" title={d.etiqueta}>
             {d.etiqueta}
           </div>
           <div className="h-3 flex-1 rounded-full bg-niebla/40">

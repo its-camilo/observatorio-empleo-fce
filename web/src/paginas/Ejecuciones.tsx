@@ -320,7 +320,7 @@ export function ListaEjecuciones() {
   if (error) return <Aviso tipo="error">{error}</Aviso>;
   if (!datos) return <Cargando />;
   return (
-    <div className="tarjeta overflow-x-auto">
+    <div className="tarjeta tabla-contenedor">
       <h2 className="mb-2 font-semibold">Historial de corridas</h2>
       <table className="tabla">
         <thead>

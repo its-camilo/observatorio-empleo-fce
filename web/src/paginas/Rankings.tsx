@@ -109,7 +109,7 @@ export default function Rankings() {
       </div>
       {rk && (
         <div className="grid gap-4 lg:grid-cols-3">
-          <div className="tarjeta overflow-x-auto lg:col-span-2">
+          <div className="tarjeta tabla-contenedor lg:col-span-2">
             <h2 className="mb-2 font-semibold">Ranking de softwares {rk.ranking[0] && `· ${rk.ranking[0].total_ofertas_carrera} ofertas`}</h2>
             <table className="tabla">
               <thead><tr><th>#</th><th>Software</th><th>Grupo</th><th>Ofertas</th><th>%</th><th>Variación vs. {rk.ranking[0]?.corte_anterior || "anterior"}</th></tr></thead>
@@ -128,7 +128,7 @@ export default function Rankings() {
       {(rkHab?.ranking?.length || rkIdi?.ranking?.length) ? (
         <div className="grid gap-4 lg:grid-cols-2">
           {rkHab && (
-            <div className="tarjeta overflow-x-auto">
+            <div className="tarjeta tabla-contenedor">
               <h2 className="mb-2 font-semibold">Habilidades blandas (RF-18)</h2>
               <table className="tabla">
                 <thead><tr><th>#</th><th>Habilidad</th><th>Ofertas</th><th>%</th></tr></thead>
@@ -139,7 +139,7 @@ export default function Rankings() {
             </div>
           )}
           {rkIdi && (
-            <div className="tarjeta overflow-x-auto">
+            <div className="tarjeta tabla-contenedor">
               <h2 className="mb-2 font-semibold">Idiomas (RF-18)</h2>
               <table className="tabla">
                 <thead><tr><th>#</th><th>Idioma</th><th>Ofertas</th><th>%</th></tr></thead>
@@ -154,7 +154,7 @@ export default function Rankings() {
       {(rkTipo?.ranking?.length || rkSector?.ranking?.length) ? (
         <div className="grid gap-4 lg:grid-cols-2">
           {rkTipo && (
-            <div className="tarjeta overflow-x-auto">
+            <div className="tarjeta tabla-contenedor">
               <h2 className="mb-2 font-semibold">
                 Tipo de oferta {rkTipo.ranking[0] && `· ${rkTipo.ranking[0].total_ofertas_carrera} ofertas`}
               </h2>
@@ -185,7 +185,7 @@ export default function Rankings() {
             </div>
           )}
           {rkSector && (
-            <div className="tarjeta overflow-x-auto">
+            <div className="tarjeta tabla-contenedor">
               <h2 className="mb-2 font-semibold">
                 Sector de empresa {rkSector.ranking[0] && `· ${rkSector.ranking[0].total_ofertas_carrera} ofertas`}
               </h2>
@@ -217,7 +217,7 @@ export default function Rankings() {
           )}
         </div>
       ) : null}
-      <div className="tarjeta overflow-x-auto">
+      <div className="tarjeta tabla-contenedor">
         <h2 className="mb-2 font-semibold">Comparación entre cortes</h2>
         <div className="mb-3 flex flex-wrap items-end gap-3">
           <div><label className="etiqueta">Corte A (anterior)</label><SelectorCorte cortes={cortes} valor={a} onCambio={setA} /></div>

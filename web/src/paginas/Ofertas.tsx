@@ -78,7 +78,7 @@ export default function Ofertas() {
       </div>
       {error && <Aviso tipo="error">{error}</Aviso>}
       {datos && (
-        <div className="tarjeta overflow-x-auto">
+        <div className="tarjeta tabla-contenedor">
           <div className="mb-2 text-sm text-texto-suave">{datos.total.toLocaleString("es-CO")} ofertas {cargando && "· actualizando…"}</div>
           <table className="tabla">
             <thead><tr><th>Cargo</th><th>Empresa</th><th>Ciudad</th><th>Carrera</th><th>Tipo / nivel</th><th>Softwares</th><th>Fuente</th><th>Publicada</th></tr></thead>
