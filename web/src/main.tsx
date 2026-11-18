@@ -6,6 +6,7 @@ import { guardarSesion, leerSesion, Sesion } from "./api";
 import { Cargando } from "./componentes/ui";
 import Login from "./paginas/Login";
 import LogoUnal from "./componentes/LogoUnal";
+import { prefetchNav } from "./prefetchNav";
 
 const Dashboard = lazy(() => import("./paginas/Dashboard"));
 const Corridas = lazy(() => import("./paginas/Corridas"));
@@ -91,6 +92,8 @@ function Marco() {
                   to={m.a}
                   end={m.a === "/"}
                   onClick={() => setAbierto(false)}
+                  onMouseEnter={() => prefetchNav(m.a)}
+                  onFocus={() => prefetchNav(m.a)}
                   className={({ isActive }) => `nav-link ${isActive ? "nav-link-activo" : ""}`}
                 >
                   {m.texto}

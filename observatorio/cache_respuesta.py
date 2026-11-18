@@ -28,3 +28,17 @@ def invalidar_prefijo(prefijo: str) -> None:
         for k in list(_almacen):
             if k.startswith(prefijo):
                 del _almacen[k]
+
+
+def invalidar_caches_analitica() -> None:
+    """Tras consolidar un corte nuevo o cambiar ofertas visibles en reportes."""
+    for prefijo in (
+        "cortes_disponibles",
+        "resumen:",
+        "analisis:",
+        "dashboard:",
+        "filtros:",
+        "total_historico",
+        "corridas:list",
+    ):
+        invalidar_prefijo(prefijo)

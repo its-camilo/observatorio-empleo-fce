@@ -54,7 +54,7 @@ def oferta_resumen(o: Oferta, con_descripcion: bool = False, max_desc: int | Non
 def buscar_ofertas(s: Session, pagina: int = 1, tamano: int = 25, con_descripcion: bool = False, max_desc: int | None = None,
                    **filtros) -> dict:
     q = filtrar_ofertas(select(Oferta), **filtros)
-    total = s.scalar(select(func.count()).select_from(q.subquery())) or 0
+    total = s.scalar(filtrar_ofertas(select(func.count()).select_from(Oferta), **filtros)) or 0
     pagina = max(1, pagina)
     filas = s.scalars(q.order_by(Oferta.fecha_publicacion.desc().nullslast(), Oferta.id_oferta).offset((pagina - 1) * tamano).limit(tamano))
     return {"total": total, "pagina": pagina, "tamano": tamano, "paginas": (total + tamano - 1) // tamano if tamano else 0,
