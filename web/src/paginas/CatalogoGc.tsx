@@ -53,10 +53,11 @@ function PanelCatalogo({ ruta, titulo }: { ruta: string; titulo: string }) {
   );
 }
 
-export default function CatalogoGc() {
+export default function CatalogoGc({ embebido = false }: { embebido?: boolean }) {
   return (
     <div className="space-y-4">
-      <Titulo>Catálogo de habilidades e idiomas</Titulo>
+      {!embebido && <Titulo>Catálogo de habilidades e idiomas</Titulo>}
+      {embebido && <h2 className="font-semibold">Habilidades e idiomas</h2>}
       <Aviso>Lista editable (RF-18): los sinónimos en español e inglés alimentan la detección en las ofertas sin cambiar código.</Aviso>
       <PanelCatalogo ruta="/catalogo-habilidades" titulo="Habilidades blandas" />
       <PanelCatalogo ruta="/catalogo-idiomas" titulo="Idiomas" />

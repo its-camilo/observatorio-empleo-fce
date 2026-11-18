@@ -6,7 +6,7 @@ import { Aviso, Cargando, Titulo, useDatos } from "../componentes/ui";
 type Termino = { id: number; termino: string; carrera: string; tipo: string; fuentes: string | null; activo: boolean };
 const CARRERAS = ["Administración de Empresas", "Contaduría Pública", "Economía"];
 
-export default function Terminos() {
+export default function Terminos({ embebido = false }: { embebido?: boolean }) {
   const admin = useEsAdmin();
   const { datos, error, recargar } = useDatos<Termino[]>("/terminos");
   const [nuevo, setNuevo] = useState({ termino: "", carrera: CARRERAS[0], tipo: "principal", fuentes: "" });
@@ -21,7 +21,8 @@ export default function Terminos() {
   const visibles = datos.filter((t) => !filtro || t.carrera === filtro);
   return (
     <div className="space-y-4">
-      <Titulo>Términos de búsqueda</Titulo>
+      {!embebido && <Titulo>Términos de búsqueda</Titulo>}
+      {embebido && <h2 className="font-semibold">Términos de búsqueda</h2>}
       <Aviso>“Principal” se usa en cada corrida. “Ampliado” solo en la mini corrida automática cuando no se llega a la meta de ofertas.
         Fuentes vacías = todas. Cambiar los términos afecta la comparación entre cortes (queda anotado en el reporte).</Aviso>
       {err && <Aviso tipo="error">{err}</Aviso>}

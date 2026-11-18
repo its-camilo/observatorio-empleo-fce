@@ -67,7 +67,7 @@ function FilaSoftware({ sw, admin, recargar }: { sw: Software; admin: boolean; r
   );
 }
 
-export default function Catalogo() {
+export default function Catalogo({ embebido = false }: { embebido?: boolean }) {
   const admin = useEsAdmin();
   const { datos, error, recargar } = useDatos<Software[]>("/catalogo");
   const [nuevo, setNuevo] = useState({ software: "", grupo: "", sinonimos: "" });
@@ -90,7 +90,8 @@ export default function Catalogo() {
   if (!datos) return <Cargando />;
   return (
     <div className="space-y-4">
-      <Titulo>Catálogo de softwares y sinónimos</Titulo>
+      {!embebido && <Titulo>Catálogo de softwares y sinónimos</Titulo>}
+      {embebido && <h2 className="font-semibold">Catálogo de softwares y sinónimos</h2>}
       <Aviso>Los cambios se aplican desde la próxima ejecución. Sinónimos con * tienen reglas especiales (mayúsculas o contexto) para evitar falsos positivos, por ejemplo “R” o “SAS”.</Aviso>
       {err && <Aviso tipo="error">{err}</Aviso>}
       {admin && (

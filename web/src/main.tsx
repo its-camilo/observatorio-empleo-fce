@@ -13,15 +13,11 @@ const LanzarCorrida = lazy(() => import("./paginas/LanzarCorrida"));
 const Ejecuciones = lazy(() => import("./paginas/Ejecuciones"));
 const Ofertas = lazy(() => import("./paginas/Ofertas"));
 const Rankings = lazy(() => import("./paginas/Rankings"));
-const Catalogo = lazy(() => import("./paginas/Catalogo"));
-const Terminos = lazy(() => import("./paginas/Terminos"));
-const NoCatalogados = lazy(() => import("./paginas/NoCatalogados"));
-const CatalogoGc = lazy(() => import("./paginas/CatalogoGc"));
+const ConfiguracionHub = lazy(() => import("./paginas/ConfiguracionHub"));
 const Validacion = lazy(() => import("./paginas/Validacion"));
 const Usuarios = lazy(() => import("./paginas/Usuarios"));
 const Cursos = lazy(() => import("./paginas/Cursos"));
 const TemasRecomendados = lazy(() => import("./paginas/TemasRecomendados"));
-const Configuracion = lazy(() => import("./paginas/Configuracion"));
 const TokensMcp = lazy(() => import("./paginas/TokensMcp"));
 
 type Ctx = { sesion: Sesion | null; setSesion: (s: Sesion | null) => void };
@@ -34,10 +30,6 @@ const MENU: { a: string; texto: string; admin?: boolean }[] = [
   { a: "/corridas", texto: "Corridas", admin: true },
   { a: "/ofertas", texto: "Ofertas" },
   { a: "/rankings", texto: "Rankings y comparación" },
-  { a: "/catalogo", texto: "Catálogo y sinónimos" },
-  { a: "/terminos", texto: "Términos de búsqueda" },
-  { a: "/no-catalogados", texto: "No catalogados" },
-  { a: "/catalogo-gc", texto: "Habilidades e idiomas", admin: true },
   { a: "/validacion", texto: "Validación" },
   { a: "/cursos", texto: "Cursos en tendencia" },
   { a: "/temas-recomendados", texto: "Temas para dictar" },
@@ -159,14 +151,15 @@ function App() {
             <Route path="/ejecuciones/:id" element={<SoloAdmin><Ejecuciones /></SoloAdmin>} />
             <Route path="/ofertas" element={<Ofertas />} />
             <Route path="/rankings" element={<Rankings />} />
-            <Route path="/catalogo" element={<Catalogo />} />
-            <Route path="/terminos" element={<Terminos />} />
-            <Route path="/no-catalogados" element={<NoCatalogados />} />
-            <Route path="/catalogo-gc" element={<SoloAdmin><CatalogoGc /></SoloAdmin>} />
+            <Route path="/configuracion" element={<ConfiguracionHub />} />
+            <Route path="/configuracion/:seccion" element={<ConfiguracionHub />} />
+            <Route path="/catalogo" element={<Navigate to="/configuracion/catalogo" replace />} />
+            <Route path="/terminos" element={<Navigate to="/configuracion/terminos" replace />} />
+            <Route path="/no-catalogados" element={<Navigate to="/configuracion/no-catalogados" replace />} />
+            <Route path="/catalogo-gc" element={<Navigate to="/configuracion/habilidades-idiomas" replace />} />
             <Route path="/validacion" element={<Validacion />} />
             <Route path="/cursos" element={<Cursos />} />
             <Route path="/temas-recomendados" element={<TemasRecomendados />} />
-            <Route path="/configuracion" element={<Configuracion />} />
             <Route path="/usuarios" element={<SoloAdmin><Usuarios /></SoloAdmin>} />
             <Route path="/tokens-mcp" element={<TokensMcp />} />
           </Route>
