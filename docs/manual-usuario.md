@@ -22,10 +22,10 @@ Cada corrida se marca con **semestre** (ej. 2026-II) y **corte** (inicio, mitad 
 2. La primera vez su cuenta queda **pendiente**: pida a un administrador (uniic_bog@unal.edu.co o clagosm@unal.edu.co)
    que la apruebe en **Usuarios**. Luego vuelva a ingresar.
 
-## 3. Lanzar una corrida (solo administradores)
+## 3. Corridas: lanzar, listar y reportes (solo administradores)
 
-1. Menú **Lanzar corrida** (visible solo para administradores).
-2. Escriba el **semestre** (ej. `2026-II`), elija el **corte** y el **modo**:
+1. Menú **Corridas** (visible solo para administradores).
+2. Expanda **Lanzar nueva corrida**, escriba el **semestre** (ej. `2026-II`), elija el **corte** y el **modo**:
    - **Completa**: la corrida real (puede tardar varias horas).
    - **Prueba**: pocas ofertas, termina en minutos; sirve para verificar que todo funciona.
 3. Pulse **Lanzar** y confirme. Puede cerrar la página: la corrida sigue en GitHub Actions.
@@ -33,15 +33,20 @@ Cada corrida se marca con **semestre** (ej. 2026-II) y **corte** (inicio, mitad 
    enlace a GitHub Actions.
 5. Solo puede haber una corrida en marcha a la vez.
 
+6. Debajo del formulario aparece el **historial** de corridas (mismas columnas de antes, incluida **Pend.**).
+7. Pulse un id para abrir el **detalle** en pestañas: *Detalle y progreso*, *Continuar / terminar* y *Reporte*.
+
+Las rutas antiguas `/lanzar` y `/ejecuciones` siguen abriendo la misma sección.
+
 **Si la corrida queda “incompleta”**: lea los avisos del reporte. Normalmente una fuente pidió bajar el ritmo o el workflow
-de GitHub alcanzó el límite de tiempo. En **Ejecuciones y reportes**, abra el detalle de la corrida:
+de GitHub alcanzó el límite de tiempo. En **Corridas**, abra el detalle de la corrida (pestaña *Continuar / terminar*):
 - **Reanudar corrida** (mismo id): continúa consultas pendientes sin repetir las ya hechas.
 - **Reintentar consolidación**: si la extracción ya terminó pero falló el procesamiento o los cursos, relanza solo esa fase.
 - **Terminar corrida**: omite las consultas pendientes (queda constancia en el reporte) y cierra la ejecución con los datos
   ya extraídos; si aún falta consolidar, lanza solo esa fase en GitHub Actions. No se puede deshacer.
 Los tres botones piden confirmación y muestran cuántas consultas quedan pendientes cuando aplica.
 
-## 4. Revisar el reporte (Ejecuciones y reportes)
+## 4. Revisar el reporte (pestaña *Reporte* del detalle)
 
 Para cada corrida verá: ofertas encontradas y guardadas **por fuente y por carrera**, **duplicados eliminados**, ofertas
 **no relevantes** descartadas, total del corte frente a la meta, si hubo **mini corrida**, **duración** y los **errores

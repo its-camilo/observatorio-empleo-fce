@@ -8,6 +8,7 @@ import Login from "./paginas/Login";
 import LogoUnal from "./componentes/LogoUnal";
 
 const Dashboard = lazy(() => import("./paginas/Dashboard"));
+const Corridas = lazy(() => import("./paginas/Corridas"));
 const LanzarCorrida = lazy(() => import("./paginas/LanzarCorrida"));
 const Ejecuciones = lazy(() => import("./paginas/Ejecuciones"));
 const Ofertas = lazy(() => import("./paginas/Ofertas"));
@@ -30,8 +31,7 @@ export const useEsAdmin = () => useContext(SesionCtx).sesion?.usuario.rol === "a
 
 const MENU: { a: string; texto: string; admin?: boolean }[] = [
   { a: "/", texto: "Inicio" },
-  { a: "/lanzar", texto: "Lanzar corrida", admin: true },
-  { a: "/ejecuciones", texto: "Ejecuciones y reportes", admin: true },
+  { a: "/corridas", texto: "Corridas", admin: true },
   { a: "/ofertas", texto: "Ofertas" },
   { a: "/rankings", texto: "Rankings y comparación" },
   { a: "/catalogo", texto: "Catálogo y sinónimos" },
@@ -152,6 +152,8 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route element={<Marco />}>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/corridas" element={<SoloAdmin><Corridas /></SoloAdmin>} />
+            <Route path="/corridas/:id" element={<SoloAdmin><Corridas /></SoloAdmin>} />
             <Route path="/lanzar" element={<SoloAdmin><LanzarCorrida /></SoloAdmin>} />
             <Route path="/ejecuciones" element={<SoloAdmin><Ejecuciones /></SoloAdmin>} />
             <Route path="/ejecuciones/:id" element={<SoloAdmin><Ejecuciones /></SoloAdmin>} />

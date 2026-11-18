@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { Aviso, Cargando, EstadoChip, Titulo, useDatos } from "../componentes/ui";
 
@@ -258,7 +258,10 @@ export function Reporte({ e }: { e: Ejecucion }) {
   );
 }
 
-function Detalle({ id }: { id: string }) {
+type TabDetalle = "detalle" | "acciones" | "reporte";
+
+export function DetalleCorrida({ id }: { id: string }) {
+  const [tab, setTab] = useState<TabDetalle>("detalle");
   const { datos, error, recargar } = useDatos<Ejecucion>(`/corridas/${id}`);
   useEffect(() => {
     if (!datos || !["en_cola", "en_curso"].includes(datos.estado)) return;
@@ -267,53 +270,114 @@ function Detalle({ id }: { id: string }) {
   }, [datos, recargar]);
   if (error) return <Aviso tipo="error">{error}</Aviso>;
   if (!datos) return <Cargando />;
+  const tabs: { id: TabDetalle; label: string }[] = [
+    { id: "detalle", label: "Detalle y progreso" },
+    { id: "acciones", label: "Continuar / terminar" },
+    { id: "reporte", label: "Reporte" },
+  ];
   return (
     <div className="space-y-4">
-      <Titulo extra={<Link className="btn-sec" to="/ejecuciones">Volver</Link>}>Ejecución {datos.id_ejecucion}</Titulo>
-      <AccionesCorridaPanel id={datos.id_ejecucion} acciones={datos.acciones} onActualizado={recargar} />
-      {datos.progreso && <PanelProgreso p={datos.progreso} />}
-      <Reporte e={datos} />
+      <Titulo extra={<Link className="btn-sec" to="/corridas">Volver a corridas</Link>}>Corrida {datos.id_ejecucion}</Titulo>
+      <div className="flex flex-wrap gap-2 border-b border-niebla pb-2">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={`rounded px-3 py-1 text-sm font-semibold ${tab === t.id ? "bg-institucional text-white" : "bg-niebla/40 text-texto"}`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === "detalle" && (
+        <div className="space-y-4">
+          <div className="tarjeta flex flex-wrap items-center gap-3 text-sm">
+            <EstadoChip estado={datos.estado} />
+            <span>
+              {datos.semestre} · {datos.corte} · modo {datos.modo}
+            </span>
+            <span className="text-texto-suave">Lanzada por {datos.ejecutado_por}</span>
+          </div>
+          {datos.progreso && <PanelProgreso p={datos.progreso} />}
+          {!datos.progreso && datos.estado !== "en_curso" && datos.estado !== "en_cola" && (
+            <p className="text-sm text-texto-suave">
+              {datos.ofertas_guardadas} ofertas guardadas · {duracion(datos.duracion_segundos || 0)}
+            </p>
+          )}
+        </div>
+      )}
+      {tab === "acciones" && (
+        <AccionesCorridaPanel id={datos.id_ejecucion} acciones={datos.acciones} onActualizado={recargar} />
+      )}
+      {tab === "reporte" && <Reporte e={datos} />}
+    </div>
+  );
+}
+
+export function ListaEjecuciones() {
+  const { datos, error } = useDatos<Ejecucion[]>("/corridas");
+  if (error) return <Aviso tipo="error">{error}</Aviso>;
+  if (!datos) return <Cargando />;
+  return (
+    <div className="tarjeta overflow-x-auto">
+      <h2 className="mb-2 font-semibold">Historial de corridas</h2>
+      <table className="tabla">
+        <thead>
+          <tr>
+            <th>Ejecución</th>
+            <th>Fecha</th>
+            <th>Corte</th>
+            <th>Estado</th>
+            <th>Pend.</th>
+            <th>Encontradas</th>
+            <th>Guardadas</th>
+            <th>Duplicados</th>
+            <th>Total corte</th>
+            <th>Duración</th>
+          </tr>
+        </thead>
+        <tbody>
+          {datos.map((e) => (
+            <tr key={e.id_ejecucion}>
+              <td>
+                <Link className="font-semibold text-institucional underline" to={`/corridas/${e.id_ejecucion}`}>
+                  {e.id_ejecucion}
+                </Link>
+                {e.acciones?.puede_reanudar && !e.acciones.en_marcha && (
+                  <span className="ml-1 text-xs text-institucional">· reanudar</span>
+                )}
+                {e.acciones?.puede_reintentar_consolidacion && !e.acciones.en_marcha && (
+                  <span className="ml-1 text-xs text-texto-suave">· consolidar</span>
+                )}
+                {e.acciones?.puede_terminar && !e.acciones.en_marcha && (
+                  <span className="ml-1 text-xs text-marina/70">· terminar</span>
+                )}
+              </td>
+              <td>{e.fecha}</td>
+              <td>
+                {e.semestre} · {e.corte}
+              </td>
+              <td>
+                <EstadoChip estado={e.estado} />
+              </td>
+              <td>{e.acciones?.consultas_pendientes ?? "—"}</td>
+              <td>{e.ofertas_encontradas}</td>
+              <td>{e.ofertas_guardadas}</td>
+              <td>{e.duplicados_eliminados}</td>
+              <td>{e.total_corte}</td>
+              <td>{duracion(e.duracion_segundos || 0)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {datos.length === 0 && <p className="p-2 text-sm text-texto-suave">Todavía no hay ejecuciones.</p>}
     </div>
   );
 }
 
 export default function Ejecuciones() {
   const { id } = useParams();
-  const { datos, error } = useDatos<Ejecucion[]>(id ? null : "/corridas");
-  if (id) return <Detalle id={id} />;
-  if (error) return <Aviso tipo="error">{error}</Aviso>;
-  if (!datos) return <Cargando />;
-  return (
-    <div>
-      <Titulo>Ejecuciones y reportes</Titulo>
-      <div className="tarjeta overflow-x-auto">
-        <table className="tabla">
-          <thead><tr><th>Ejecución</th><th>Fecha</th><th>Corte</th><th>Estado</th><th>Pend.</th><th>Encontradas</th><th>Guardadas</th><th>Duplicados</th><th>Total corte</th><th>Duración</th></tr></thead>
-          <tbody>
-            {datos.map((e) => (
-              <tr key={e.id_ejecucion}>
-                <td>
-                  <Link className="text-institucional font-semibold underline" to={`/ejecuciones/${e.id_ejecucion}`}>{e.id_ejecucion}</Link>
-                  {e.acciones?.puede_reanudar && !e.acciones.en_marcha && (
-                    <span className="ml-1 text-xs text-institucional">· reanudar</span>
-                  )}
-                  {e.acciones?.puede_reintentar_consolidacion && !e.acciones.en_marcha && (
-                    <span className="ml-1 text-xs text-texto-suave">· consolidar</span>
-                  )}
-                  {e.acciones?.puede_terminar && !e.acciones.en_marcha && (
-                    <span className="ml-1 text-xs text-marina/70">· terminar</span>
-                  )}
-                </td>
-                <td>{e.fecha}</td><td>{e.semestre} · {e.corte}</td><td><EstadoChip estado={e.estado} /></td>
-                <td>{e.acciones?.consultas_pendientes ?? "—"}</td>
-                <td>{e.ofertas_encontradas}</td><td>{e.ofertas_guardadas}</td><td>{e.duplicados_eliminados}</td><td>{e.total_corte}</td>
-                <td>{duracion(e.duracion_segundos || 0)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {datos.length === 0 && <p className="p-2 text-sm text-texto-suave">Todavía no hay ejecuciones.</p>}
-      </div>
-    </div>
-  );
+  if (id) return <Navigate to={`/corridas/${id}`} replace />;
+  return <Navigate to="/corridas" replace />;
 }

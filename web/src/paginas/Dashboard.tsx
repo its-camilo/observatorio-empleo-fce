@@ -26,7 +26,7 @@ export default function Dashboard() {
   if (error) return <Aviso tipo="error">{error}</Aviso>;
   return (
     <div>
-      <Titulo extra={admin ? <Link className="btn-cta" to="/lanzar">Lanzar corrida</Link> : undefined}>Inicio</Titulo>
+      <Titulo extra={admin ? <Link className="btn-cta" to="/corridas">Corridas</Link> : undefined}>Inicio</Titulo>
       {cargando && !datos && (
         <>
           <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -44,7 +44,7 @@ export default function Dashboard() {
       {!datos ? null : (
         <>
       {!r && (
-        <Aviso>{admin ? "Aún no hay ofertas. Lance la primera corrida desde “Lanzar corrida”." : "Aún no hay ofertas en el observatorio."}</Aviso>
+        <Aviso>{admin ? "Aún no hay ofertas. Lance la primera corrida desde el menú Corridas." : "Aún no hay ofertas en el observatorio."}</Aviso>
       )}
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Kpi etiqueta="Último corte" valor={r ? `${r.semestre} · ${r.corte}` : "—"} />
@@ -73,7 +73,7 @@ export default function Dashboard() {
             <tbody>
               {datos.ultimas_corridas.map((e) => (
                 <tr key={e.id_ejecucion}>
-                  <td><Link className="text-institucional font-semibold underline" to={`/ejecuciones/${e.id_ejecucion}`}>{e.id_ejecucion}</Link></td>
+                  <td><Link className="text-institucional font-semibold underline" to={`/corridas/${e.id_ejecucion}`}>{e.id_ejecucion}</Link></td>
                   <td>{e.semestre} · {e.corte}</td>
                   <td><EstadoChip estado={e.estado} /></td>
                   <td>{e.ofertas_guardadas}</td>
