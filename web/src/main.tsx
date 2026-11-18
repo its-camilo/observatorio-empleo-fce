@@ -1,12 +1,13 @@
 import React, { Suspense, createContext, lazy, useContext, useState } from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useNavigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate } from "react-router-dom";
 import "./index.css";
 import { guardarSesion, leerSesion, Sesion } from "./api";
 import { Cargando } from "./componentes/ui";
 import Login from "./paginas/Login";
 import LogoUnal from "./componentes/LogoUnal";
-import { prefetchNav } from "./prefetchNav";
+import { BarraLateral } from "./componentes/BarraLateral";
+import { MenuMovil } from "./componentes/MenuMovil";
 
 const Dashboard = lazy(() => import("./paginas/Dashboard"));
 const Corridas = lazy(() => import("./paginas/Corridas"));
@@ -70,51 +71,16 @@ function Marco() {
     navegar("/login");
   };
   const enlaces = MENU.filter((m) => !m.admin || sesion.usuario.rol === "admin");
+  const cerrarMenu = () => setAbierto(false);
   return (
     <div className="shell-institucional">
-      {abierto && (
-        <button
-          type="button"
-          className="fixed inset-0 z-40 bg-marina/50 md:hidden"
-          aria-label="Cerrar menú"
-          onClick={() => setAbierto(false)}
-        />
-      )}
+      <MenuMovil abierto={abierto} onCerrar={cerrarMenu}>
+        <BarraLateral enlaces={enlaces} sesion={sesion} onCerrarMovil={cerrarMenu} onSalir={salir} />
+      </MenuMovil>
       <div className="shell-card md:flex-row">
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-          <aside
-            className={`${
-              abierto ? "flex flex-col" : "hidden"
-            } fixed inset-y-0 left-0 z-50 w-[min(100%,16.5rem)] shrink-0 overflow-y-auto bg-institucional text-white shadow-2xl md:relative md:z-auto md:flex md:w-64`}
-          >
-            <div className="border-b border-white/15 px-5 py-5">
-              <div className="font-titulo text-xs font-extrabold uppercase tracking-widest text-acento">UIFCE · 2026</div>
-              <div className="mt-1 font-titulo text-sm font-extrabold uppercase leading-tight text-white">
-                Observatorio de Empleo FCE
-              </div>
-            </div>
-            <nav className="flex-1 overflow-y-auto px-2 py-3">
-              {enlaces.map((m) => (
-                <NavLink
-                  key={m.a}
-                  to={m.a}
-                  end={m.a === "/"}
-                  onClick={() => setAbierto(false)}
-                  onMouseEnter={() => prefetchNav(m.a)}
-                  onFocus={() => prefetchNav(m.a)}
-                  className={({ isActive }) => `nav-link ${isActive ? "nav-link-activo" : ""}`}
-                >
-                  {m.texto}
-                </NavLink>
-              ))}
-            </nav>
-            <div className="border-t border-white/15 px-4 py-4 text-xs text-white/80">
-              <div className="truncate font-semibold">{sesion.usuario.email}</div>
-              <div className="text-acento">{sesion.usuario.rol === "admin" ? "Administrador" : "Usuario"}</div>
-              <button type="button" className="mt-2 font-semibold underline decoration-acento underline-offset-2" onClick={salir}>
-                Cerrar sesión
-              </button>
-            </div>
+          <aside className="hidden w-64 shrink-0 flex-col overflow-y-auto bg-institucional text-white md:flex md:relative">
+            <BarraLateral enlaces={enlaces} sesion={sesion} onSalir={salir} />
           </aside>
           <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3 sm:p-5 md:p-8 md:pl-6">
             <div className="mb-4 flex items-center justify-between gap-2 border-b border-niebla pb-3 md:hidden">
