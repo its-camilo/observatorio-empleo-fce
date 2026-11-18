@@ -195,6 +195,7 @@ Documentación interactiva: `/api/docs`. Grupos principales:
 - `/api/auth/*` (Google, sesión), `/api/usuarios` (admin), `/api/tokens-mcp` (cada usuario gestiona los suyos)
 - `/api/catalogo`, `/api/sinonimos`, `/api/terminos`, `/api/no-catalogados`, `/api/config` (lectura: usuarios; escritura: admin)
 - `/api/corridas` (solo admin: listar, ver progreso, lanzar), `/api/ofertas` (filtros, detalle), `/api/analisis/*` (cortes, resumen, ranking, comparar), `/api/dashboard`
+- Front admin: sección **Corridas** (`/corridas`, detalle `/corridas/:id`); rutas `/lanzar` y `/ejecuciones` redirigen allí (sin cambio de API).
 - `/api/exportar/csv|excel` (sesión), `/api/publico/<tabla>.csv` (Power BI), `/api/validacion/*`, `/api/cursos`
 
 Roles: **admin** (catálogo, términos, configuración, usuarios, lanzar corridas, validación manual, tokens MCP propios)
