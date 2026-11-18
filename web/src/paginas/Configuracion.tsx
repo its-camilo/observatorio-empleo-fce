@@ -38,7 +38,7 @@ function Editor({ p, admin, alGuardar }: { p: Param; admin: boolean; alGuardar: 
   );
 }
 
-export default function Configuracion() {
+export function ConfiguracionGeneral({ embebido = false }: { embebido?: boolean }) {
   const admin = useEsAdmin();
   const { datos, error, recargar } = useDatos<Param[]>("/config");
   if (error) return <Aviso tipo="error">{error}</Aviso>;
@@ -51,7 +51,7 @@ export default function Configuracion() {
 
   return (
     <div className="space-y-3">
-      <Titulo>Configuración</Titulo>
+      {!embebido && <Titulo>Configuración</Titulo>}
       <Aviso>
         Parámetros de búsqueda y del procesamiento (fuentes, ciudades, ventana de días, límites, meta, reglas de carrera, IA, cursos).
         {admin ? " Edite con cuidado: el formato avanzado es JSON." : " Solo los administradores pueden editarlos."}

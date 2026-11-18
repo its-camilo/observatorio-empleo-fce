@@ -21,6 +21,10 @@ cómo agregar una fuente, qué hacer cuando una página cambia, los riesgos (en 
   o del artefacto de cada corrida en Actions.
 - **Corridas**: nunca en Vercel (límite de 60 s). La API registra la ejecución “en cola” y dispara el workflow con el
   mismo `run_id`; el progreso se calcula desde la tabla `particiones`, igual para Actions y para la CLI.
+- **Front configuración**: `web/src/paginas/ConfiguracionHub.tsx` agrupa parámetros generales (`/configuracion`), catálogo
+  (`/configuracion/catalogo`), términos (`/configuracion/terminos`), no catalogados (`/configuracion/no-catalogados`) y
+  habilidades/idiomas solo admin (`/configuracion/habilidades-idiomas`). Las rutas legadas `/catalogo`, `/terminos`,
+  `/no-catalogados` y `/catalogo-gc` redirigen con `Navigate` (misma API y permisos que antes).
 
 ### Flujo de una corrida (`observatorio/orquestador.py`)
 
@@ -45,7 +49,7 @@ y una marca `procesada`. Relanzar con el mismo `run_id` nunca duplica.
 
 | RF | Qué | Dónde |
 |---|---|---|
-| RF-01 Configuración | Parámetros editables sin código (tabla `config`), términos, catálogo | `parametros.py`, `db/semilla.py`, `datos/*.json`, `api/rutas/configuracion.py`, páginas Configuración/Términos/Catálogo |
+| RF-01 Configuración | Parámetros editables sin código (tabla `config`), términos, catálogo | `parametros.py`, `db/semilla.py`, `datos/*.json`, `api/rutas/configuracion.py`, `ConfiguracionHub` + páginas embebidas Catálogo/Términos/No catalogados/GC |
 | RF-02 LinkedIn | Búsqueda JobSpy + endpoint público de invitados; detalle con reintentos | `scraper/linkedin.py`, `scraper/http.py` |
 | RF-03 Otras fuentes | Indeed (JobSpy), Computrabajo (requests + BeautifulSoup) | `scraper/jobspy_fuentes.py`, `scraper/computrabajo.py` |
 | RF-04 Campos | Diccionario de datos sec. 9 | `db/modelos.py` (`Oferta`, `OfertaSoftware`, `Catalogo`, `Ejecucion`), `pipeline/limpieza.py` |

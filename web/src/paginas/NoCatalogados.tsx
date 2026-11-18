@@ -5,7 +5,7 @@ import { Aviso, Cargando, Titulo, useDatos } from "../componentes/ui";
 
 type Nc = { id: number; termino: string; frecuencia_total: number; frecuencia_ultima: number; estado: string; ejemplo_id_oferta: string | null; semestre: string; corte: string };
 
-export default function NoCatalogados() {
+export default function NoCatalogados({ embebido = false }: { embebido?: boolean }) {
   const admin = useEsAdmin();
   const [estado, setEstado] = useState("pendiente");
   const { datos, error, recargar } = useDatos<Nc[]>(`/no-catalogados${qs({ estado })}`, [estado]);
@@ -22,7 +22,8 @@ export default function NoCatalogados() {
   };
   return (
     <div className="space-y-4">
-      <Titulo>Términos no catalogados</Titulo>
+      {!embebido && <Titulo>Términos no catalogados</Titulo>}
+      {embebido && <h2 className="font-semibold">Términos no catalogados</h2>}
       <Aviso>Herramientas que aparecen con frecuencia en las ofertas y no están en el catálogo. Agréguelas para que se cuenten desde la próxima ejecución, o descártelas.</Aviso>
       {err && <Aviso tipo="error">{err}</Aviso>}
       <select className="campo" value={estado} onChange={(e) => setEstado(e.target.value)}>

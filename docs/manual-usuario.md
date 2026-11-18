@@ -62,6 +62,8 @@ abre la oferta original. Botones **Descargar CSV** y **Descargar Excel** (con lo
 
 ## 7. Catálogo de softwares y sinónimos (solo administradores editan)
 
+Menú **Configuración** → pestaña **Catálogo y sinónimos** (la ruta antigua `/catalogo` redirige aquí).
+
 - **Agregar un software**: nombre estándar, grupo y sinónimos separados por coma (ej. `EViews` · grupo estadístico · `eviews, e-views`).
 - **Sinónimos**: todas las formas en que aparece (Power BI, PowerBI, PBI…). No importan mayúsculas ni tildes.
 - Para palabras cortas o ambiguas (como **R** o **SAS**) marque *Distingue mayúsculas* y/o *Exige contexto* y escriba las
@@ -71,10 +73,14 @@ abre la oferta original. Botones **Descargar CSV** y **Descargar Excel** (con lo
 
 ## 8. Términos de búsqueda
 
+Menú **Configuración** → pestaña **Términos de búsqueda**.
+
 Lista por carrera. **Principal** = se usa en cada corrida. **Ampliado** = solo en la mini corrida automática.
 Puede desactivar un término sin borrarlo. Cambiar términos cambia lo que se compara entre cortes: el reporte lo anota.
 
 ## 9. Términos no catalogados
+
+Menú **Configuración** → pestaña **No catalogados**.
 
 Herramientas que se repiten en las ofertas y no están en el catálogo (ej. Alteryx, Snowflake). Revise la lista y elija
 **Agregar** (con su grupo) o **Descartar**. Así se detectan herramientas nuevas en el mercado.
@@ -93,6 +99,8 @@ Menú **Cursos**: cursos que muestran Coursera, edX y Platzi para los términos 
 posición en el buscador, calificación y popularidad. Se actualizan con cada corrida.
 
 ## 12. Configuración (administradores)
+
+Menú **Configuración**: pestaña **General** (parámetros JSON y editores de reparto) y, en las demás pestañas, las secciones descritas en los capítulos 7 a 9. Los administradores ven además **Habilidades e idiomas** (antes en el menú como ruta `/catalogo-gc`, que redirige a `/configuracion/habilidades-idiomas`).
 
 Parámetros en formato JSON: fuentes (activar/desactivar, `max_por_particion` por término y ciudad, pausas), ciudades,
 ventana de días, tipo de oferta, **`objetivo_ofertas_corrida`** (cuántas ofertas crudas recolectar por corrida, repartidas entre fuentes con más cupo en LinkedIn y consultando LinkedIn primero; también define la meta de relevantes para la mini corrida), mini corrida, duplicados,
