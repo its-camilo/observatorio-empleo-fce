@@ -14,7 +14,7 @@ Pasos sueltos (los usa GitHub Actions):
     python -m observatorio.run reporte    --run-id ID
     python -m observatorio.run exportar   --semestre 2026-II --corte inicio --salida observatorio.xlsx
     python -m observatorio.run migrar     (crea/actualiza tablas con Alembic) | semilla
-    python -m observatorio.run purga-operativa | purga-reglas [--aplicar]  (purga por reglas operativas y valor formativo)
+    python -m observatorio.run purga-operativa | purga-reglas [--purgar --aplicar]  (borrado solo con ambos flags)
 """
 from __future__ import annotations
 
@@ -128,7 +128,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--ejecutado-por")
     p.add_argument("--salida", default="observatorio.xlsx")
     p.add_argument("--github-output", help="Archivo donde escribir la matriz (GitHub Actions)")
-    p.add_argument("--aplicar", action="store_true", help="Con purga-operativa/purga-reglas: aplica cambios (sin esto solo vista previa)")
+    p.add_argument(
+        "--aplicar",
+        action="store_true",
+        help="Backfills: escribe en BD. Purga: parte del par borrado (requiere también --purgar).",
+    )
+    p.add_argument("--purgar", action="store_true", help="Purga: permite borrar ofertas solo junto con --aplicar")
     p.add_argument("--motivo", help="Motivo del cierre (cerrar-corrida)")
     p.add_argument("--conclusion", help="Conclusión de GitHub (failure, cancelled, timed_out)")
     p.add_argument("--ids", help="Ids de ejecución separados por comas (cerrar-colgadas)")
@@ -308,12 +313,13 @@ def main(argv: list[str] | None = None) -> int:
                 .select_from(TerminoBusqueda)
                 .where(TerminoBusqueda.termino.in_(TERMINOS_BUSQUEDA_RETIRADOS), TerminoBusqueda.activo.is_(True))
             ) or 0
-            res = purgar_por_reglas(s, aplicar=a.aplicar)
-            n_desactivados = desactivar_terminos_retirados(s) if a.aplicar else 0
+            res = purgar_por_reglas(s, aplicar=a.aplicar, purgar=a.purgar)
+            ejecutar = a.aplicar and a.purgar
+            n_desactivados = desactivar_terminos_retirados(s) if ejecutar else 0
             print(
                 json.dumps(
                     {
-                        "modo": "aplicar" if a.aplicar else "vista_previa",
+                        "modo": "aplicar" if ejecutar else "vista_previa",
                         "accion": a.accion,
                         "terminos_retirados_activos": n_terms_activos,
                         "terminos_desactivados": n_desactivados,
@@ -322,7 +328,7 @@ def main(argv: list[str] | None = None) -> int:
                     ensure_ascii=False,
                 )
             )
-            if a.aplicar:
+            if ejecutar:
                 s.commit()
             return 0
     return 0

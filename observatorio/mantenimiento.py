@@ -152,8 +152,17 @@ def _scan_ofertas_por_reglas(
     return ids_purgables, dict(conteos), dict(por_fuente), dict(ejemplos_cargo), ejemplos_detalle
 
 
-def purgar_por_reglas(s: Session, *, aplicar: bool = False, max_ejemplos: int = 20) -> dict:
-    """Reevalúa todas las ofertas con exclusión operativa y valor formativo (sin LLM)."""
+def purgar_por_reglas(
+    s: Session,
+    *,
+    aplicar: bool = False,
+    purgar: bool = False,
+    max_ejemplos: int = 20,
+) -> dict:
+    """Reevalúa todas las ofertas con exclusión operativa y valor formativo (sin LLM).
+
+    Borrado solo si ``aplicar`` y ``purgar`` son verdaderos; en otro caso devuelve vista previa.
+    """
     cfg = config_purga(s)
     patrones = list(cfg.get("exclusion_operativa_titulo") or [])
     requiere = bool(cfg.get("requiere_software_o_habilidad", True))
@@ -174,8 +183,15 @@ def purgar_por_reglas(s: Session, *, aplicar: bool = False, max_ejemplos: int = 
         "requiere_software_o_habilidad": requiere,
         "solo_capitales_departamento": solo_capitales,
         "motivos_no_purgables": sorted(MOTIVOS_NO_PURGABLES),
+        "purgar": purgar,
+        "aplicar_solicitado": aplicar,
     }
-    if not aplicar:
+    ejecutar_borrado = aplicar and purgar
+    if not ejecutar_borrado:
+        if aplicar and not purgar:
+            salida["aviso"] = (
+                "Borrado no ejecutado: se requiere purgar=True además de aplicar para eliminar ofertas."
+            )
         if ejemplos:
             salida["ejemplos_por_motivo"] = ejemplos
         if ejemplos_detalle:
@@ -196,6 +212,12 @@ def purgar_por_reglas(s: Session, *, aplicar: bool = False, max_ejemplos: int = 
     return salida
 
 
-def purgar_ofertas_operativas(s: Session, *, aplicar: bool = False, max_ejemplos: int = 20) -> dict:
+def purgar_ofertas_operativas(
+    s: Session,
+    *,
+    aplicar: bool = False,
+    purgar: bool = False,
+    max_ejemplos: int = 20,
+) -> dict:
     """Alias histórico: aplica la purga completa por reglas (operativo + valor formativo)."""
-    return purgar_por_reglas(s, aplicar=aplicar, max_ejemplos=max_ejemplos)
+    return purgar_por_reglas(s, aplicar=aplicar, purgar=purgar, max_ejemplos=max_ejemplos)
