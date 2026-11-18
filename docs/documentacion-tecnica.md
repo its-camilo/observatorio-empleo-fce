@@ -97,8 +97,11 @@ Tablas del diccionario: `ofertas`, `oferta_software`, `catalogo` (+ `sinonimos`)
 El observatorio prioriza ofertas de nivel analista/profesional o superior (no auxiliar/asistente administrativo de oficina).
 Los patrones editables `exclusion_operativa_titulo` (tabla `config`) descartan el cargo **antes** de las reglas de carrera, para que
 palabras amplias como `administrativ` no clasifiquen como Administración de Empresas un «Auxiliar Administrativo» encontrado en Computrabajo.
-En bases ya pobladas: `python -m observatorio.run purga-reglas` (vista previa con conteos por motivo y ejemplos) y
-`python -m observatorio.run purga-reglas --aplicar`. El alias `purga-operativa` ejecuta la misma lógica.
+En bases ya pobladas: `python -m observatorio.run purga-reglas` (vista previa con conteos por motivo y ejemplos).
+Para **borrar** ofertas hace falta **ambos** flags: `python -m observatorio.run purga-reglas --purgar --aplicar`.
+`--aplicar` sin `--purgar` nunca elimina (evita borrados accidentales al correr mantenimiento con backfills).
+En GitHub Actions (*Mantenimiento de base de datos*), el input `purgar` debe ser verdadero y `aplicar` también para el borrado.
+El alias `purga-operativa` ejecuta la misma lógica.
 
 ### Valor formativo (`requiere_software_o_habilidad`)
 

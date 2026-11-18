@@ -7,7 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       aplicar:
-        description: "Purga por reglas y backfill sector: false = vista previa; true = escribe cambios (--aplicar)"
+        description: "Backfills (sector): false = vista previa; true = escribe (--aplicar). No borra ofertas por sí solo."
+        required: true
+        type: boolean
+        default: false
+      purgar:
+        description: "Purga por reglas: false = solo vista previa (nunca borra); true permite borrar si aplicar=true"
         required: true
         type: boolean
         default: false
@@ -91,12 +96,12 @@ jobs:
           python -m observatorio.run backfill-habilidades "${ARGS[@]}"
       - name: Purga por reglas (vista previa o aplicar)
         run: |
-          echo "=== Purga por reglas (aplicar=${{ inputs.aplicar }}) ==="
-          if [ "${{ inputs.aplicar }}" = "true" ]; then
-            python -m observatorio.run purga-reglas --aplicar
-          else
-            python -m observatorio.run purga-reglas
+          echo "=== Purga por reglas (purgar=${{ inputs.purgar }}, aplicar=${{ inputs.aplicar }}) ==="
+          ARGS=()
+          if [ "${{ inputs.purgar }}" = "true" ] && [ "${{ inputs.aplicar }}" = "true" ]; then
+            ARGS+=(--purgar --aplicar)
           fi
+          python -m observatorio.run purga-reglas "${ARGS[@]}"
       - name: Cerrar corridas colgadas en curso/cola
         env:
           GITHUB_REPO: ${{ github.repository }}

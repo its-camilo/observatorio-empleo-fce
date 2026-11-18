@@ -37,7 +37,7 @@ observatorio/            Paquete Python
 api/index.py             entrada de Vercel
 web/                     front (React + Vite + TypeScript + Tailwind)
 alembic/                 migraciones de la base
-.github/workflows/       corrida.yml (scraping) y pruebas.yml
+.github/workflows/       corrida.yml (scraping), mantenimiento.yml, pruebas.yml
 powerbi/                 consultas Power Query y guía
 tests/                   pruebas (pytest)
 ```
@@ -97,6 +97,24 @@ Escribe en la base indicada por `DATABASE_URL` y aparece en el aplicativo igual 
 4. Si algo falla, vuelva a lanzar con el **mismo `run_id`**: continúa donde quedó.
 
 Repositorio público ⇒ minutos de Actions gratuitos sin límite mensual. No se guardan datos en el repositorio.
+
+### Mantenimiento de base de datos (`.github/workflows/mantenimiento.yml`)
+
+Workflow manual: migraciones, semilla, backfills opcionales y purga por reglas. **No** se dispara en deploy ni en corridas.
+
+| Input | Uso |
+|---|---|
+| `aplicar` | **Backfill sector**: `true` escribe sectores inferidos; `false` solo conteos. No borra ofertas por sí solo. |
+| `backfill_sector` / `backfill_habilidades` | Activan cada backfill (semestre/corte opcionales). |
+| `purgar` | `false` (defecto): la purga solo muestra vista previa. `true`: permite borrar **solo si** `aplicar=true` también. |
+| `aplicar` + `purgar` | Ambos en `true` ejecutan `purga-reglas --purgar --aplicar` (borrado según reglas existentes). |
+
+CLI equivalente: `python -m observatorio.run purga-reglas` (vista previa); borrado con `--purgar --aplicar`.
+
+**Puntos que pueden borrar ofertas por purga** (todos exigen opt-in explícito de purga + aplicar salvo vista previa):
+
+- Workflow **Mantenimiento** (paso *Purga por reglas*).
+- CLI `purga-reglas` / `purga-operativa` (no hay API web ni paso en `corrida.yml`).
 
 ## Vercel (front + API + MCP)
 

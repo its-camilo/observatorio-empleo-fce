@@ -63,6 +63,27 @@ def test_purga_aplicar_borra(sesion):
         )
     )
     sesion.commit()
-    res = purgar_por_reglas(sesion, aplicar=True)
+    res = purgar_por_reglas(sesion, aplicar=True, purgar=True)
     assert res["eliminadas"] == 1
     assert sesion.get(Oferta, "del-1") is None
+
+
+def test_purga_aplicar_sin_purgar_no_borra(sesion):
+    hoy = date.today()
+    sesion.add(
+        Oferta(
+            id_oferta="del-2",
+            fuente="CT",
+            fecha_extraccion=hoy,
+            semestre="2026-II",
+            corte="Inicio",
+            cargo="Recepcionista",
+            ciudad="Bogotá",
+            descripcion="Atención al público",
+        )
+    )
+    sesion.commit()
+    res = purgar_por_reglas(sesion, aplicar=True, purgar=False)
+    assert res["eliminadas"] == 0
+    assert "aviso" in res
+    assert sesion.get(Oferta, "del-2") is not None
