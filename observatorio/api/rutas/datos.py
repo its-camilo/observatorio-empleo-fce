@@ -308,11 +308,18 @@ def exportar_csv(tabla: str, semestre: str | None = None, corte: str | None = No
 
 
 @router.get("/exportar/excel")
-def exportar_excel(semestre: str | None = None, corte: str | None = None, descripcion: bool = True,
+def exportar_excel(semestre: str | None = None, corte: str | None = None, descripcion: bool = False,
                    _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
-    from observatorio.exportar import a_excel
+    from observatorio.exportar import MAX_EXCEL_RESPUESTA_BYTES, a_excel
 
     datos = a_excel(s, semestre, _corte(corte), incluir_descripcion=descripcion)
+    if len(datos) > MAX_EXCEL_RESPUESTA_BYTES:
+        raise HTTPException(
+            413,
+            "El archivo Excel supera el límite de descarga del servidor. "
+            "Use CSV para la tabla de ofertas con descripción, filtre semestre y corte, "
+            "o descargue Excel con descripcion=false (sin columna descripción).",
+        )
     nombre = f"observatorio_{semestre or 'historico'}_{(corte or 'todos').lower()}.xlsx"
     return Response(datos, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f'attachment; filename="{nombre}"'})

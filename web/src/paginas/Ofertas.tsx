@@ -37,23 +37,40 @@ export default function Ofertas() {
   const { datos: detalle } = useDatos<Oferta>(abierta ? `/ofertas/${encodeURIComponent(abierta.id_oferta)}` : null, [abierta]);
   const cambiar = (k: keyof typeof VACIO) => (v: string) => setF({ ...f, [k]: v });
   const [errDesc, setErrDesc] = useState<string | null>(null);
+  const [descargando, setDescargando] = useState<"excel" | "csv" | null>(null);
 
   const exportar = async (tipo: "excel" | "csv") => {
     setErrDesc(null);
+    setDescargando(tipo);
     try {
       const sufijo = `${aplicados.semestre || "todo"}_${aplicados.corte || "todos"}`;
-      if (tipo === "excel") await descargar(`/exportar/excel${qs({ semestre: aplicados.semestre, corte: aplicados.corte })}`, `observatorio_${sufijo}.xlsx`);
-      else await descargar(`/exportar/csv${qs({ tabla: "ofertas", semestre: aplicados.semestre, corte: aplicados.corte })}`, `ofertas_${sufijo}.csv`);
+      if (tipo === "excel") {
+        await descargar(
+          `/exportar/excel${qs({ semestre: aplicados.semestre, corte: aplicados.corte, descripcion: false })}`,
+          `observatorio_${sufijo}.xlsx`,
+        );
+      } else {
+        await descargar(
+          `/exportar/csv${qs({ tabla: "ofertas", semestre: aplicados.semestre, corte: aplicados.corte })}`,
+          `ofertas_${sufijo}.csv`,
+        );
+      }
     } catch (e) {
       setErrDesc((e as Error).message);
+    } finally {
+      setDescargando(null);
     }
   };
 
   return (
     <div>
-      <Titulo extra={<div className="flex gap-2">
-        <button className="btn-sec" onClick={() => exportar("csv")}>Descargar CSV</button>
-        <button className="btn-sec" onClick={() => exportar("excel")}>Descargar Excel</button>
+      <Titulo extra={<div className="flex flex-wrap gap-2">
+        <button className="btn-sec" disabled={descargando !== null} onClick={() => exportar("csv")}>
+          {descargando === "csv" ? "Generando CSV…" : "Descargar CSV"}
+        </button>
+        <button className="btn-sec" disabled={descargando !== null} onClick={() => exportar("excel")}>
+          {descargando === "excel" ? "Generando Excel…" : "Descargar Excel"}
+        </button>
       </div>}>Ofertas</Titulo>
       {errDesc && <Aviso tipo="error">{errDesc}</Aviso>}
       <div className="tarjeta mb-4">

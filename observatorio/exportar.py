@@ -216,10 +216,25 @@ def a_csv(tabla: str, datos: Iterable[dict]) -> Iterator[str]:
     yield buf.getvalue()
 
 
+# Límite seguro bajo el tope de cuerpo de respuesta en Vercel Serverless (~4,5 MB).
+MAX_EXCEL_RESPUESTA_BYTES = 4_000_000
+
+
+def _append_hoja_datos(
+    wb,
+    titulo: str,
+    tabla: str,
+    filas_iter: Iterator[dict],
+) -> None:
+    ws = wb.create_sheet(titulo)
+    ws.append(COLUMNAS[tabla])
+    for d in filas_iter:
+        ws.append([_texto(d.get(c))[:32000] for c in COLUMNAS[tabla]])
+
+
 def a_excel(s: Session, semestre: str | None = None, corte: str | None = None, incluir_descripcion: bool = True) -> bytes:
     """Libro con las tablas del diccionario + ranking por carrera."""
     from openpyxl import Workbook
-    from openpyxl.styles import Font
 
     from observatorio.analisis import (
         cortes_disponibles,
@@ -230,8 +245,7 @@ def a_excel(s: Session, semestre: str | None = None, corte: str | None = None, i
         ranking_tipo_oferta,
     )
 
-    wb = Workbook(write_only=False)
-    wb.remove(wb.active)
+    wb = Workbook(write_only=True)
     for tabla, titulo in (
         ("ofertas", "Ofertas"),
         ("oferta_software", "Oferta_Software"),
@@ -242,17 +256,15 @@ def a_excel(s: Session, semestre: str | None = None, corte: str | None = None, i
         ("cursos", "Cursos"),
         ("temas_recomendados", "Temas_recomendados"),
     ):
-        ws = wb.create_sheet(titulo)
-        ws.append(COLUMNAS[tabla])
-        for c in ws[1]:
-            c.font = Font(bold=True)
-        for d in filas(s, tabla, semestre, corte, incluir_descripcion=incluir_descripcion):
-            ws.append([_texto(d.get(c))[:32000] for c in COLUMNAS[tabla]])
+        _append_hoja_datos(
+            wb,
+            titulo,
+            tabla,
+            filas(s, tabla, semestre, corte, incluir_descripcion=incluir_descripcion),
+        )
     ws = wb.create_sheet("Ranking")
     cab = ["semestre", "corte", "carrera", "posicion", "software", "grupo", "ofertas", "porcentaje", "variacion_pp", "corte_anterior"]
     ws.append(cab)
-    for c in ws[1]:
-        c.font = Font(bold=True)
     cortes = [(semestre, corte)] if semestre and corte else [(x["semestre"], x["corte"]) for x in cortes_disponibles(s)
                                                              if (not semestre or x["semestre"] == semestre)]
     from observatorio.parametros import leer_config
@@ -264,8 +276,6 @@ def a_excel(s: Session, semestre: str | None = None, corte: str | None = None, i
     ws = wb.create_sheet("Ranking_Habilidades")
     cab_h = ["semestre", "corte", "carrera", "posicion", "habilidad", "ofertas", "porcentaje"]
     ws.append(cab_h)
-    for c in ws[1]:
-        c.font = Font(bold=True)
     for sem, cor in cortes:
         for car in carreras:
             for r in ranking_habilidades(s, sem, cor, car):
@@ -273,8 +283,6 @@ def a_excel(s: Session, semestre: str | None = None, corte: str | None = None, i
     ws = wb.create_sheet("Ranking_Idiomas")
     cab_i = ["semestre", "corte", "carrera", "posicion", "idioma", "ofertas", "porcentaje"]
     ws.append(cab_i)
-    for c in ws[1]:
-        c.font = Font(bold=True)
     for sem, cor in cortes:
         for car in carreras:
             for r in ranking_idiomas(s, sem, cor, car):
@@ -282,8 +290,6 @@ def a_excel(s: Session, semestre: str | None = None, corte: str | None = None, i
     ws = wb.create_sheet("Ranking_TipoOferta")
     cab_t = ["semestre", "corte", "carrera", "posicion", "tipo_oferta", "ofertas", "porcentaje", "variacion_pp", "corte_anterior"]
     ws.append(cab_t)
-    for c in ws[1]:
-        c.font = Font(bold=True)
     for sem, cor in cortes:
         for car in carreras:
             for r in ranking_tipo_oferta(s, sem, cor, car):
@@ -291,8 +297,6 @@ def a_excel(s: Session, semestre: str | None = None, corte: str | None = None, i
     ws = wb.create_sheet("Ranking_Sector")
     cab_s = ["semestre", "corte", "carrera", "posicion", "sector", "ofertas", "porcentaje", "variacion_pp", "corte_anterior"]
     ws.append(cab_s)
-    for c in ws[1]:
-        c.font = Font(bold=True)
     for sem, cor in cortes:
         for car in carreras:
             for r in ranking_sector(s, sem, cor, car):

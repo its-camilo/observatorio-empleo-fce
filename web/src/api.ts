@@ -79,17 +79,57 @@ export const api = {
   del: <T>(ruta: string) => pedir<T>("DELETE", ruta),
 };
 
+async function mensajeErrorDescarga(r: Response): Promise<string> {
+  let detalle = "";
+  const tipo = r.headers.get("content-type") || "";
+  if (tipo.includes("application/json")) {
+    try {
+      const d = (await r.clone().json()) as { detail?: string };
+      if (typeof d.detail === "string") detalle = d.detail;
+    } catch {
+      /* sin JSON */
+    }
+  }
+  if (detalle) return detalle;
+  if (r.status === 413) {
+    return "El archivo es demasiado grande para descargarlo desde el servidor. Pruebe filtrar semestre/corte o use CSV.";
+  }
+  if (r.status === 504 || r.status === 408) {
+    return "La descarga tardó demasiado (tiempo agotado). Filtre semestre y corte o use CSV.";
+  }
+  return `No se pudo descargar el archivo (error ${r.status}).`;
+}
+
 /** Descarga un archivo protegido (CSV/Excel) usando la sesión. */
 export async function descargar(ruta: string, nombre: string) {
   const sesion = leerSesion();
-  const r = await fetch(`/api${ruta}`, { headers: sesion ? { Authorization: `Bearer ${sesion.token}` } : {} });
-  if (!r.ok) throw new ErrorApi(`No se pudo descargar (error ${r.status})`, r.status);
+  let r: Response;
+  try {
+    r = await fetch(`/api${ruta}`, { headers: sesion ? { Authorization: `Bearer ${sesion.token}` } : {} });
+  } catch {
+    throw new Error("No se pudo conectar con el servidor para descargar el archivo.");
+  }
+  if (!r.ok) throw new ErrorApi(await mensajeErrorDescarga(r), r.status);
   const blob = await r.blob();
+  if (blob.size === 0) {
+    throw new Error("El servidor devolvió un archivo vacío.");
+  }
+  if (nombre.endsWith(".xlsx")) {
+    const cab = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+    if (cab[0] !== 0x50 || cab[1] !== 0x4b) {
+      throw new Error(
+        "La respuesta no es un Excel válido (posible error del servidor). Si pide descripciones completas, use CSV.",
+      );
+    }
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = nombre;
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
+  a.remove();
   URL.revokeObjectURL(url);
 }
 
