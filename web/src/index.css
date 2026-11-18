@@ -150,6 +150,19 @@
   }
 }
 
+/* Bloqueo de scroll con menú móvil abierto (iOS Safari) */
+html.menu-movil-abierto,
+body.menu-movil-abierto {
+  overflow: hidden;
+  height: 100%;
+  touch-action: none;
+}
+
+.menu-movil-panel {
+  isolation: isolate;
+  -webkit-overflow-scrolling: touch;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .btn,
   .btn-sec,
