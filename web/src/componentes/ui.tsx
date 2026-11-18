@@ -116,7 +116,7 @@ export function useDatos<T>(ruta: string | null, deps: unknown[] = []) {
     setCargando(true);
     setError(null);
     try {
-      setDatos(await api.get<T>(ruta));
+      setDatos(await api.get<T>(ruta, { cache: true }));
     } catch (e) {
       setError((e as Error).message);
     } finally {

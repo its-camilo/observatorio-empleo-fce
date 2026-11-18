@@ -22,7 +22,16 @@ from observatorio.normas_corrida import normalizar_corte, normalizar_semestre
 router = APIRouter()
 META_VALIDACION = 90.0
 _DASHBOARD_TTL = 180
+_ANALISIS_TTL = 300
+_FILTROS_TTL = 600
+_CORRIDAS_LISTA_TTL = 20
 _HEADERS_DASHBOARD = {"Cache-Control": "private, max-age=180"}
+_HEADERS_ANALISIS = {"Cache-Control": "private, max-age=300"}
+_HEADERS_FILTROS = {"Cache-Control": "private, max-age=600"}
+
+
+def _json_cache(clave: str, ttl: float, calcular, headers: dict[str, str]):
+    return JSONResponse(obtener_o_calcular(clave, ttl, calcular), headers=headers)
 
 
 def _corte(c: str | None) -> str | None:
@@ -53,11 +62,22 @@ def lanzar_corrida(d: LanzarIn, u: Usuario = Depends(solo_admin), s: Session = D
 def listar_corridas(_: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
     from observatorio.corridas import acciones_corrida, ejecucion_dict, reconciliar_corridas_activas
 
-    filas = list(s.scalars(select(Ejecucion).order_by(Ejecucion.creado_en.desc()).limit(100)))
-    if reconciliar_corridas_activas(s, consultar_github=True):
-        s.commit()
+    def _listar():
         filas = list(s.scalars(select(Ejecucion).order_by(Ejecucion.creado_en.desc()).limit(100)))
-    return [{**ejecucion_dict(e), "acciones": acciones_corrida(s, e)} for e in filas]
+        activas = s.scalar(
+            select(func.count()).select_from(Ejecucion).where(Ejecucion.estado.in_(("en_cola", "en_curso")))
+        )
+        if activas and reconciliar_corridas_activas(s, consultar_github=True):
+            s.commit()
+            filas = list(s.scalars(select(Ejecucion).order_by(Ejecucion.creado_en.desc()).limit(100)))
+        return [{**ejecucion_dict(e), "acciones": acciones_corrida(s, e)} for e in filas]
+
+    return _json_cache(
+        "corridas:list",
+        _CORRIDAS_LISTA_TTL,
+        _listar,
+        {"Cache-Control": f"private, max-age={int(_CORRIDAS_LISTA_TTL)}"},
+    )
 
 
 @router.get("/corridas/{id_ejecucion}")
@@ -119,7 +139,12 @@ def ofertas(semestre: str | None = None, corte: str | None = None, carrera: str 
 
 @router.get("/ofertas/filtros")
 def filtros(_: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
-    return valores_filtros(s)
+    return _json_cache(
+        "filtros:ofertas",
+        _FILTROS_TTL,
+        lambda: valores_filtros(s),
+        _HEADERS_FILTROS,
+    )
 
 
 @router.get("/ofertas/{id_oferta}")
@@ -133,28 +158,58 @@ def oferta(id_oferta: str, _: Usuario = Depends(usuario_actual), s: Session = De
 # ----------------------------------------------------------------- análisis
 @router.get("/analisis/cortes")
 def cortes(_: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
-    return analisis.cortes_disponibles(s)
+    return _json_cache(
+        "cortes_disponibles",
+        _ANALISIS_TTL,
+        lambda: analisis.cortes_disponibles(s),
+        _HEADERS_ANALISIS,
+    )
 
 
 @router.get("/analisis/resumen")
 def resumen(semestre: str, corte: str, _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
-    return analisis.resumen_corte(s, semestre, normalizar_corte(corte))
+    cor = normalizar_corte(corte)
+    clave = f"analisis:resumen:{semestre}:{cor}"
+    return _json_cache(clave, _ANALISIS_TTL, lambda: analisis.resumen_corte(s, semestre, cor), _HEADERS_ANALISIS)
 
 
 @router.get("/analisis/ranking")
 def ranking(semestre: str, corte: str, carrera: str | None = None, _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
-    return {"ranking": analisis.ranking(s, semestre, normalizar_corte(corte), carrera),
-            "grupos": analisis.ranking_por_grupo(s, semestre, normalizar_corte(corte), carrera)}
+    cor = normalizar_corte(corte)
+    car = carrera or ""
+    clave = f"analisis:ranking:{semestre}:{cor}:{car}"
+
+    def _calc():
+        return {
+            "ranking": analisis.ranking(s, semestre, cor, carrera),
+            "grupos": analisis.ranking_por_grupo(s, semestre, cor, carrera),
+        }
+
+    return _json_cache(clave, _ANALISIS_TTL, _calc, _HEADERS_ANALISIS)
 
 
 @router.get("/analisis/ranking-habilidades")
 def ranking_habilidades(semestre: str, corte: str, carrera: str | None = None, _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
-    return {"ranking": analisis.ranking_habilidades(s, semestre, normalizar_corte(corte), carrera)}
+    cor = normalizar_corte(corte)
+    clave = f"analisis:ranking-hab:{semestre}:{cor}:{carrera or ''}"
+    return _json_cache(
+        clave,
+        _ANALISIS_TTL,
+        lambda: {"ranking": analisis.ranking_habilidades(s, semestre, cor, carrera)},
+        _HEADERS_ANALISIS,
+    )
 
 
 @router.get("/analisis/ranking-idiomas")
 def ranking_idiomas(semestre: str, corte: str, carrera: str | None = None, _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
-    return {"ranking": analisis.ranking_idiomas(s, semestre, normalizar_corte(corte), carrera)}
+    cor = normalizar_corte(corte)
+    clave = f"analisis:ranking-idi:{semestre}:{cor}:{carrera or ''}"
+    return _json_cache(
+        clave,
+        _ANALISIS_TTL,
+        lambda: {"ranking": analisis.ranking_idiomas(s, semestre, cor, carrera)},
+        _HEADERS_ANALISIS,
+    )
 
 
 @router.get("/analisis/ranking-tipo-oferta")
@@ -165,7 +220,14 @@ def ranking_tipo_oferta(
     _: Usuario = Depends(usuario_actual),
     s: Session = Depends(get_db),
 ):
-    return {"ranking": analisis.ranking_tipo_oferta(s, semestre, normalizar_corte(corte), carrera)}
+    cor = normalizar_corte(corte)
+    clave = f"analisis:ranking-tipo:{semestre}:{cor}:{carrera or ''}"
+    return _json_cache(
+        clave,
+        _ANALISIS_TTL,
+        lambda: {"ranking": analisis.ranking_tipo_oferta(s, semestre, cor, carrera)},
+        _HEADERS_ANALISIS,
+    )
 
 
 @router.get("/analisis/ranking-sector")
@@ -176,13 +238,22 @@ def ranking_sector(
     _: Usuario = Depends(usuario_actual),
     s: Session = Depends(get_db),
 ):
-    return {"ranking": analisis.ranking_sector(s, semestre, normalizar_corte(corte), carrera)}
+    cor = normalizar_corte(corte)
+    clave = f"analisis:ranking-sector:{semestre}:{cor}:{carrera or ''}"
+    return _json_cache(
+        clave,
+        _ANALISIS_TTL,
+        lambda: {"ranking": analisis.ranking_sector(s, semestre, cor, carrera)},
+        _HEADERS_ANALISIS,
+    )
 
 
 @router.get("/analisis/comparar")
 def comparar(semestre_a: str, corte_a: str, semestre_b: str, corte_b: str, carrera: str | None = None,
              _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
-    return analisis.comparar(s, semestre_a, normalizar_corte(corte_a), semestre_b, normalizar_corte(corte_b), carrera)
+    ca, cb = normalizar_corte(corte_a), normalizar_corte(corte_b)
+    clave = f"analisis:comparar:{semestre_a}:{ca}:{semestre_b}:{cb}:{carrera or ''}"
+    return _json_cache(clave, _ANALISIS_TTL, lambda: analisis.comparar(s, semestre_a, ca, semestre_b, cb, carrera), _HEADERS_ANALISIS)
 
 
 def _armar_dashboard(s: Session, rol: str) -> dict:

@@ -27,6 +27,8 @@ export class ErrorApi extends Error {
   }
 }
 
+import { cacheEnVuelo, guardarCache, leerCache, registrarEnVuelo } from "./cacheApi";
+
 async function pedir<T>(metodo: string, ruta: string, cuerpo?: unknown): Promise<T> {
   const sesion = leerSesion();
   const r = await fetch(`/api${ruta}`, {
@@ -56,7 +58,22 @@ async function pedir<T>(metodo: string, ruta: string, cuerpo?: unknown): Promise
 }
 
 export const api = {
-  get: <T>(ruta: string) => pedir<T>("GET", ruta),
+  get: <T>(ruta: string, opts?: { cache?: boolean }) => {
+    const rutaNorm = ruta;
+    if (opts?.cache) {
+      const hit = leerCache<T>(rutaNorm);
+      if (hit !== null) return Promise.resolve(hit);
+      const inflight = cacheEnVuelo<T>(rutaNorm);
+      if (inflight) return inflight;
+      const prom = pedir<T>("GET", rutaNorm).then((d) => {
+        guardarCache(rutaNorm, d);
+        return d;
+      });
+      registrarEnVuelo(rutaNorm, prom);
+      return prom;
+    }
+    return pedir<T>("GET", ruta);
+  },
   post: <T>(ruta: string, cuerpo?: unknown) => pedir<T>("POST", ruta, cuerpo ?? {}),
   put: <T>(ruta: string, cuerpo?: unknown) => pedir<T>("PUT", ruta, cuerpo ?? {}),
   del: <T>(ruta: string) => pedir<T>("DELETE", ruta),

@@ -42,6 +42,8 @@ export default function Rankings() {
   const [carrera, setCarrera] = useState("");
   const [a, setA] = useState("");
   const [b, setB] = useState("");
+  const [extras, setExtras] = useState(false);
+  const [compararActivo, setCompararActivo] = useState(false);
   useEffect(() => {
     if (cortes && cortes.length) {
       const ult = cortes[cortes.length - 1];
@@ -54,17 +56,31 @@ export default function Rankings() {
   const [sem, cor] = sel.split("|");
   const { datos: rk } = useDatos<{ ranking: Fila[]; grupos: { grupo: string; menciones: number }[] }>(
     sel ? `/analisis/ranking${qs({ semestre: sem, corte: cor, carrera })}` : null, [sel, carrera]);
+  const extraQs = sel ? qs({ semestre: sem, corte: cor, carrera }) : "";
   const { datos: rkHab } = useDatos<{ ranking: FilaGc[] }>(
-    sel ? `/analisis/ranking-habilidades${qs({ semestre: sem, corte: cor, carrera })}` : null, [sel, carrera]);
+    extras && sel ? `/analisis/ranking-habilidades${extraQs}` : null,
+    [extras, sel, carrera],
+  );
   const { datos: rkIdi } = useDatos<{ ranking: FilaGc[] }>(
-    sel ? `/analisis/ranking-idiomas${qs({ semestre: sem, corte: cor, carrera })}` : null, [sel, carrera]);
+    extras && sel ? `/analisis/ranking-idiomas${extraQs}` : null,
+    [extras, sel, carrera],
+  );
   const { datos: rkTipo } = useDatos<{ ranking: FilaDist[] }>(
-    sel ? `/analisis/ranking-tipo-oferta${qs({ semestre: sem, corte: cor, carrera })}` : null, [sel, carrera]);
+    extras && sel ? `/analisis/ranking-tipo-oferta${extraQs}` : null,
+    [extras, sel, carrera],
+  );
   const { datos: rkSector } = useDatos<{ ranking: FilaDist[] }>(
-    sel ? `/analisis/ranking-sector${qs({ semestre: sem, corte: cor, carrera })}` : null, [sel, carrera]);
+    extras && sel ? `/analisis/ranking-sector${extraQs}` : null,
+    [extras, sel, carrera],
+  );
   const [sa, ca] = a.split("|");
   const [sb, cb] = b.split("|");
-  const { datos: cmp } = useDatos<Comparacion>(a && b ? `/analisis/comparar${qs({ semestre_a: sa, corte_a: ca, semestre_b: sb, corte_b: cb, carrera })}` : null, [a, b, carrera]);
+  const { datos: cmp } = useDatos<Comparacion>(
+    compararActivo && a && b
+      ? `/analisis/comparar${qs({ semestre_a: sa, corte_a: ca, semestre_b: sb, corte_b: cb, carrera })}`
+      : null,
+    [compararActivo, a, b, carrera],
+  );
 
   if (error) return <Aviso tipo="error">{error}</Aviso>;
   if (!cortes) return <Cargando />;
@@ -78,6 +94,18 @@ export default function Rankings() {
           <select className="campo" value={carrera} onChange={(e) => setCarrera(e.target.value)}>
             {CARRERAS.map((c) => <option key={c} value={c}>{c || "Todas"}</option>)}
           </select></div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {!extras && (
+          <button type="button" className="btn-sec text-xs" onClick={() => setExtras(true)}>
+            Cargar habilidades, idiomas, tipos y sectores
+          </button>
+        )}
+        {!compararActivo && (
+          <button type="button" className="btn-sec text-xs" onClick={() => setCompararActivo(true)}>
+            Cargar comparación entre cortes
+          </button>
+        )}
       </div>
       {rk && (
         <div className="grid gap-4 lg:grid-cols-3">

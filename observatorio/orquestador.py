@@ -906,6 +906,10 @@ def finalizar(s: Session, ejec: Ejecucion, proc=None) -> None:
     else:
         ejec.estado = "completada"
     ejec.fase = "terminada"
+    if ejec.estado in ("completada", "incompleta") and ejec.fase == "terminada":
+        from observatorio.cache_respuesta import invalidar_caches_analitica
+
+        invalidar_caches_analitica()
 
 
 # ---------------------------------------------------------------------------
