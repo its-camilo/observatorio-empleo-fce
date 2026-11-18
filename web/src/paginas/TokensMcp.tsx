@@ -41,7 +41,7 @@ export default function TokensMcp() {
       )}
       {error && <Aviso tipo="error">{error}</Aviso>}
       {!datos ? <Cargando /> : (
-        <div className="tarjeta overflow-x-auto">
+        <div className="tarjeta tabla-contenedor">
           <table className="tabla">
             <thead><tr><th>Nombre</th><th>Inicio</th><th>Creado</th><th>Último uso</th><th>Estado</th><th /></tr></thead>
             <tbody>{datos.map((t) => (

@@ -98,7 +98,7 @@ export default function Validacion() {
         {admin && <button className="btn" disabled={!sel} onClick={crear}>Nueva muestra</button>}
       </div>
       {muestras && muestras.length > 0 && (
-        <div className="tarjeta overflow-x-auto">
+        <div className="tarjeta tabla-contenedor">
           <table className="tabla">
             <thead><tr><th>Muestra</th><th>Corte</th><th>Validadas</th><th>Precisión</th><th /></tr></thead>
             <tbody>{muestras.map((m) => (

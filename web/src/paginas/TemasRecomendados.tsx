@@ -46,7 +46,7 @@ export default function TemasRecomendados() {
       {!datos ? (
         <Cargando />
       ) : (
-        <div className="tarjeta overflow-x-auto">
+        <div className="tarjeta tabla-contenedor">
           <table className="tabla">
             <thead>
               <tr>

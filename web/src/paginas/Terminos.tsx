@@ -38,7 +38,7 @@ export default function Terminos({ embebido = false }: { embebido?: boolean }) {
           })}>Agregar</button>
         </div>
       )}
-      <div className="tarjeta overflow-x-auto">
+      <div className="tarjeta tabla-contenedor">
         <div className="mb-2"><select className="campo" value={filtro} onChange={(e) => setFiltro(e.target.value)}><option value="">Todas las carreras</option>{CARRERAS.map((c) => <option key={c}>{c}</option>)}</select>
           <span className="ml-2 text-sm text-texto-suave">{visibles.length} términos</span></div>
         <table className="tabla">

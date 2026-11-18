@@ -31,7 +31,7 @@ export default function NoCatalogados({ embebido = false }: { embebido?: boolean
       </select>
       {error && <Aviso tipo="error">{error}</Aviso>}
       {!datos ? <Cargando /> : (
-        <div className="tarjeta overflow-x-auto">
+        <div className="tarjeta tabla-contenedor">
           <table className="tabla">
             <thead><tr><th>Término</th><th>Ofertas (última corrida)</th><th>Ofertas (total)</th><th>Corte</th><th>Ejemplo</th><th>Estado</th>{admin && <th>Decisión</th>}</tr></thead>
             <tbody>{datos.map((x) => (

@@ -14,14 +14,15 @@
 }
 
 @layer base {
+  html,
   body {
-    @apply bg-institucional text-marina;
+    @apply overflow-x-hidden bg-institucional text-marina;
   }
 }
 
 /* Marco institucional + textura halftone en costados */
 .shell-institucional {
-  @apply relative min-h-screen bg-institucional px-3 py-3 md:px-4 md:py-4;
+  @apply relative min-h-screen w-full max-w-[100vw] bg-institucional px-2 py-2 sm:px-3 sm:py-3 md:px-4 md:py-4;
 }
 
 .shell-institucional::before,
@@ -37,6 +38,14 @@
   background-size: 8px 8px;
   mask-image: linear-gradient(to center, black, transparent 85%);
   z-index: 0;
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .shell-institucional::before,
+  .shell-institucional::after {
+    display: block;
+  }
 }
 
 .shell-institucional::before {
@@ -93,6 +102,14 @@
 
   .etiqueta {
     @apply mb-1 block font-titulo text-xs font-bold uppercase tracking-wide text-marina;
+  }
+
+  .tabla-contenedor {
+    @apply -mx-1 w-full max-w-full overflow-x-auto overscroll-x-contain;
+  }
+
+  .tabla-contenedor .tabla {
+    @apply min-w-[32rem];
   }
 
   .tabla {

@@ -109,7 +109,7 @@ export default function Catalogo({ embebido = false }: { embebido?: boolean }) {
         <button className="btn mt-2" onClick={async () => setPrueba(await api.post("/catalogo/probar", { texto }))}>Probar</button>
         {prueba && <div className="mt-2 text-sm">{prueba.length ? prueba.map((p) => <span key={p.software} className="chip">{p.software} ← “{p.texto_encontrado}”</span>) : "No se detectó ningún software."}</div>}
       </div>
-      <div className="tarjeta overflow-x-auto">
+      <div className="tarjeta tabla-contenedor">
         <table className="tabla">
           <thead><tr><th>Software</th><th>Grupo</th><th>Sinónimos</th><th>Activo</th><th /></tr></thead>
           <tbody>{datos.map((sw) => <FilaSoftware key={sw.id} sw={sw} admin={admin} recargar={recargar} />)}</tbody>

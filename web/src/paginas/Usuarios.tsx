@@ -19,7 +19,7 @@ export default function Usuarios() {
       <Titulo>Usuarios</Titulo>
       {pendientes > 0 && <Aviso tipo="alerta">{pendientes} usuario(s) esperan aprobación.</Aviso>}
       {err && <Aviso tipo="error">{err}</Aviso>}
-      <div className="tarjeta overflow-x-auto">
+      <div className="tarjeta tabla-contenedor">
         <table className="tabla">
           <thead><tr><th>Correo</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Último acceso</th><th>Acciones</th></tr></thead>
           <tbody>{datos.map((u) => (

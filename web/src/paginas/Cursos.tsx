@@ -50,7 +50,7 @@ export default function Cursos() {
       {!datos ? (
         <Cargando />
       ) : (
-        <div className="tarjeta overflow-x-auto">
+        <div className="tarjeta tabla-contenedor">
           <table className="tabla">
             <thead>
               <tr>

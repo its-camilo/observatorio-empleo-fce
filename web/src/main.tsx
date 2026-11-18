@@ -71,12 +71,20 @@ function Marco() {
   const enlaces = MENU.filter((m) => !m.admin || sesion.usuario.rol === "admin");
   return (
     <div className="shell-institucional">
+      {abierto && (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-marina/50 md:hidden"
+          aria-label="Cerrar menú"
+          onClick={() => setAbierto(false)}
+        />
+      )}
       <div className="shell-card md:flex-row">
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
           <aside
             className={`${
-              abierto ? "block" : "hidden"
-            } shrink-0 bg-institucional text-white md:flex md:w-64 md:flex-col`}
+              abierto ? "flex flex-col" : "hidden"
+            } fixed inset-y-0 left-0 z-50 w-[min(100%,16.5rem)] shrink-0 overflow-y-auto bg-institucional text-white shadow-2xl md:relative md:z-auto md:flex md:w-64`}
           >
             <div className="border-b border-white/15 px-5 py-5">
               <div className="font-titulo text-xs font-extrabold uppercase tracking-widest text-acento">UIFCE · 2026</div>
@@ -84,7 +92,7 @@ function Marco() {
                 Observatorio de Empleo FCE
               </div>
             </div>
-            <nav className="max-h-[50vh] overflow-y-auto px-2 py-3 md:max-h-none md:flex-1">
+            <nav className="flex-1 overflow-y-auto px-2 py-3">
               {enlaces.map((m) => (
                 <NavLink
                   key={m.a}
@@ -105,11 +113,16 @@ function Marco() {
               </button>
             </div>
           </aside>
-          <main className="min-w-0 flex-1 overflow-auto p-5 md:p-8 md:pl-6">
-            <div className="mb-4 flex items-center justify-between gap-2 md:hidden">
-              <span className="font-titulo text-xs font-bold uppercase text-marina">Menú</span>
-              <button type="button" className="btn-sec text-xs" onClick={() => setAbierto(!abierto)}>
-                {abierto ? "Cerrar" : "Abrir"}
+          <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-3 sm:p-5 md:p-8 md:pl-6">
+            <div className="mb-4 flex items-center justify-between gap-2 border-b border-niebla pb-3 md:hidden">
+              <span className="font-titulo text-xs font-bold uppercase text-marina">Observatorio FCE</span>
+              <button
+                type="button"
+                className="btn-sec text-xs"
+                aria-expanded={abierto}
+                onClick={() => setAbierto(!abierto)}
+              >
+                {abierto ? "✕ Cerrar" : "☰ Menú"}
               </button>
             </div>
             <Suspense fallback={<Cargando />}>
