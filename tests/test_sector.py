@@ -82,6 +82,31 @@ def test_taxonomia_canonica_limite_y_compuestos():
     assert sector_canonico(
         "Servicios financieros, Servicios y consultoría de TI y Tecnología, información e internet"
     ) == "Servicios financieros"
+    assert sector_canonico("Educación básica y secundaria") == "Educación básica y secundaria"
+    assert sector_canonico("Desarrollo y comercio internacional") == "Desarrollo y comercio internacional"
+    assert sector_canonico("Consultoría y servicios a empresas") == "Consultoría y servicios a empresas"
+    assert sector_canonico("Seguros y Consultoría y servicios a empresas") == "Seguros"
+    assert (
+        sector_canonico(
+            "Fabricación de productos químicos, Servicios de alimentos y bebidas y Fabricación de alimentos y bebidas"
+        )
+        == "Fabricación de productos químicos"
+    )
+    assert (
+        sector_canonico("Desarrollo de software y Servicios y consultoría de TI") == "Desarrollo de software"
+    )
+
+
+def test_backfill_renormaliza_ofertas_excluidas(sesion):
+    excl = _oferta("x1", "Beta SAS", "Retail")
+    excl.excluida_resultado_corrida = True
+    sesion.add(excl)
+    sesion.commit()
+    prev = backfill_sectores(sesion, aplicar=False)
+    assert prev["ofertas_renormalizadas"] >= 1
+    backfill_sectores(sesion, aplicar=True)
+    sesion.commit()
+    assert sesion.get(Oferta, "x1").sector == "Comercio al por menor"
 
 
 def test_backfill_renormaliza_sector_existente(sesion):

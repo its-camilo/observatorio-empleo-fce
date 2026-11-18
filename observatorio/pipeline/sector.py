@@ -9,7 +9,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from observatorio.db.modelos import Oferta
-from observatorio.filtro_ofertas import oferta_incluida_en_resultados
 from observatorio.pipeline.sectores_taxonomia import sector_canonico, resumen_mapeo
 from observatorio.texto import clave_empresa, es_empresa_generica, limpiar_espacios, plegar
 
@@ -87,9 +86,11 @@ def construir_mapa_sector_por_empresa(
     s: Session,
     *,
     min_ofertas: int = 2,
-    solo_incluidas: bool = True,
+    solo_incluidas: bool = False,
 ) -> dict[str, str]:
     """Empresa normalizada → sector más frecuente (mínimo min_ofertas con sector conocido)."""
+    from observatorio.filtro_ofertas import oferta_incluida_en_resultados
+
     q = select(Oferta.sector, Oferta.empresa).where(Oferta.sector.isnot(None), Oferta.sector != "")
     if solo_incluidas:
         q = q.where(oferta_incluida_en_resultados())
@@ -130,7 +131,7 @@ def backfill_sectores(
     sin_antes = _contar_sin_sector(s, semestre, corte)
     distinct_antes = _contar_sectores_distintos(s, semestre, corte)
     valores_distintos = _listar_sectores_distintos(s, semestre, corte)
-    mapa = construir_mapa_sector_por_empresa(s)
+    mapa = construir_mapa_sector_por_empresa(s, solo_incluidas=False)
 
     inferidos = 0
     renorm = 0
@@ -143,9 +144,8 @@ def backfill_sectores(
             q = q.where(Oferta.corte == corte)
         return q
 
-    # 1) Completar sectores vacíos
-    base_vacio = select(Oferta).where(oferta_incluida_en_resultados())
-    base_vacio = base_vacio.where((Oferta.sector.is_(None)) | (Oferta.sector == ""))
+    # 1) Completar sectores vacíos (todas las filas de ofertas, no solo incluidas en corrida)
+    base_vacio = select(Oferta).where((Oferta.sector.is_(None)) | (Oferta.sector == ""))
     base_vacio = _filtrar(base_vacio)
     ultimo_id: str | None = None
     while True:
@@ -177,9 +177,8 @@ def backfill_sectores(
         if len(filas) < tam:
             break
 
-    # 2) Renormalizar sectores existentes a taxonomía canónica
-    base_sec = select(Oferta).where(oferta_incluida_en_resultados())
-    base_sec = base_sec.where(Oferta.sector.isnot(None), Oferta.sector != "")
+    # 2) Renormalizar sectores existentes a taxonomía canónica (todas las ofertas)
+    base_sec = select(Oferta).where(Oferta.sector.isnot(None), Oferta.sector != "")
     base_sec = _filtrar(base_sec)
     ultimo_id = None
     while True:
@@ -211,7 +210,7 @@ def backfill_sectores(
 
     sin_despues = _contar_sin_sector(s, semestre, corte) if aplicar else max(0, sin_antes - inferidos)
     distinct_despues = _contar_sectores_distintos(s, semestre, corte) if aplicar else len(
-        {sector_canonico(v) for v in valores_distintos if v}
+        {c for v in valores_distintos if v and (c := normalizar_sector(v))}
     )
     mapeo = resumen_mapeo(valores_distintos)
     cnt_por_canon = {k: len(vs) for k, vs in mapeo["por_canonico"].items()}
@@ -234,8 +233,7 @@ def backfill_sectores(
 
 
 def _contar_sin_sector(s: Session, semestre: str | None, corte: str | None) -> int:
-    q = select(func.count()).select_from(Oferta).where(oferta_incluida_en_resultados())
-    q = q.where((Oferta.sector.is_(None)) | (Oferta.sector == ""))
+    q = select(func.count()).select_from(Oferta).where((Oferta.sector.is_(None)) | (Oferta.sector == ""))
     if semestre:
         q = q.where(Oferta.semestre == semestre)
     if corte:
@@ -247,7 +245,7 @@ def _contar_sectores_distintos(s: Session, semestre: str | None, corte: str | No
     q = (
         select(func.count(func.distinct(Oferta.sector)))
         .select_from(Oferta)
-        .where(oferta_incluida_en_resultados(), Oferta.sector.isnot(None), Oferta.sector != "")
+        .where(Oferta.sector.isnot(None), Oferta.sector != "")
     )
     if semestre:
         q = q.where(Oferta.semestre == semestre)
@@ -257,7 +255,7 @@ def _contar_sectores_distintos(s: Session, semestre: str | None, corte: str | No
 
 
 def _listar_sectores_distintos(s: Session, semestre: str | None, corte: str | None) -> list[str]:
-    q = select(Oferta.sector).where(oferta_incluida_en_resultados(), Oferta.sector.isnot(None), Oferta.sector != "")
+    q = select(Oferta.sector).where(Oferta.sector.isnot(None), Oferta.sector != "")
     if semestre:
         q = q.where(Oferta.semestre == semestre)
     if corte:

@@ -174,6 +174,20 @@ _ALIASES_EXACTOS: dict[str, str] = {
     plegar("Transporte terrestre en camión"): "Transporte, logística y almacenamiento",
     plegar("Transporte terrestre de pasajeros"): "Transporte, logística y almacenamiento",
     plegar("Transporte marítimo"): "Transporte, logística y almacenamiento",
+    plegar("Casinos y centros de apuestas"): "Casinos y juegos de azar",
+    plegar("Formación profesional y coaching"): "Gestión educativa y formación profesional",
+    plegar("Alquiler de productos de consumo"): "Alquiler de bienes y equipos",
+    plegar("Servicios de bienestar y mantenimiento físico"): "Hospitales y atención sanitaria",
+    plegar("Servicios de datos de sistemas de TI"): "Servicios y consultoría de TI",
+    plegar("Fabricación de productos cárnicos"): "Fabricación de alimentos y bebidas",
+    plegar(
+        "Comercio al por mayor de equipos de ferretería, fontanería y calefacción"
+    ): "Comercio al por mayor",
+    plegar("Proveedores de e-learning y Programas de gestión educativa"): (
+        "Gestión educativa y formación profesional"
+    ),
+    plegar("Fabricación de maquinaria de automatización"): "Fabricación de maquinaria industrial",
+    plegar("Ingeniería industrial o mecánica y Minería"): "Servicios de ingeniería",
     plegar("Centros de atención telefónica"): "Servicios profesionales",
     plegar("Productos de redes informáticos"): "Seguridad de redes y sistemas informáticos",
     plegar("Servicios de consultoría y asesoramiento"): "Consultoría y servicios a empresas",
@@ -185,12 +199,45 @@ _ALIASES_EXACTOS: dict[str, str] = {
     plegar("Farmacias minoristas"): "Comercio al por menor",
 }
 
-_RE_FRAG = re.compile(r"\s*,\s*|\s+y\s+", re.I)
+_RE_Y = re.compile(r"\s+y\s+", re.I)
 
 
-def _fragmentos(valor: str) -> list[str]:
-    trozos = _RE_FRAG.split(valor)
-    return [limpiar_espacios(t) for t in trozos if limpiar_espacios(t)]
+def _mapear_clave_exacta(clave: str) -> str | None:
+    if clave in _CANONICO_POR_CLAVE:
+        return _CANONICO_POR_CLAVE[clave]
+    if clave in _ALIASES_EXACTOS:
+        return _ALIASES_EXACTOS[clave]
+    return None
+
+
+def _mapear_clave(clave: str) -> str | None:
+    """Resuelve una etiqueta simple (sin descomponer compuestos)."""
+    exacta = _mapear_clave_exacta(clave)
+    if exacta:
+        return exacta
+    return _regla_por_clave(clave)
+
+
+def _partes_por_coma(valor: str) -> list[str]:
+    return [limpiar_espacios(p) for p in valor.split(",") if limpiar_espacios(p)]
+
+
+def _partes_por_y_greedy(valor: str) -> list[str]:
+    """Parte cadenas «A y B y C» agrupando hasta formar un sector reconocible."""
+    trozos = [limpiar_espacios(t) for t in _RE_Y.split(valor) if limpiar_espacios(t)]
+    if len(trozos) <= 1:
+        return trozos
+    partes: list[str] = []
+    acum = trozos[0]
+    for trozo in trozos[1:]:
+        candidato = f"{acum} y {trozo}"
+        if _mapear_clave(plegar(candidato)):
+            acum = candidato
+        else:
+            partes.append(acum)
+            acum = trozo
+    partes.append(acum)
+    return partes
 
 
 def _regla_por_clave(clave: str) -> str | None:
@@ -373,6 +420,14 @@ def _regla_por_clave(clave: str) -> str | None:
     return None
 
 
+def _primer_canonico_de_partes(partes: list[str]) -> str | None:
+    for parte in partes:
+        canon = _mapear_clave(plegar(parte))
+        if canon and canon != "Otros sectores":
+            return canon
+    return None
+
+
 @lru_cache(maxsize=4096)
 def sector_canonico(valor: str | None) -> str | None:
     """Mapea un sector crudo (posiblemente compuesto) a una etiqueta canónica."""
@@ -382,28 +437,26 @@ def sector_canonico(valor: str | None) -> str | None:
     if not t:
         return None
 
-    partes = _fragmentos(t) if ("," in t or re.search(r"\s+y\s+", t, re.I)) else [t]
-    mapeados: list[str] = []
-    for parte in partes:
-        clave = plegar(parte)
-        canon = _regla_por_clave(clave)
+    clave_completa = plegar(t)
+    canon = _mapear_clave_exacta(clave_completa)
+    if canon:
+        return canon[:255]
+
+    if "," in t:
+        canon = _primer_canonico_de_partes(_partes_por_coma(t))
         if canon:
-            mapeados.append(canon)
+            return canon[:255]
 
-    if not mapeados:
-        clave_completa = plegar(t)
-        canon = _regla_por_clave(clave_completa)
+    if _RE_Y.search(t):
+        canon = _primer_canonico_de_partes(_partes_por_y_greedy(t))
         if canon:
-            mapeados.append(canon)
+            return canon[:255]
 
-    if not mapeados:
-        return "Otros sectores"
+    canon = _regla_por_clave(clave_completa)
+    if canon:
+        return canon[:255]
 
-    # Preferir el fragmento más específico (no “Otros”) — el primero suele ser el principal en LinkedIn
-    for c in mapeados:
-        if c != "Otros sectores":
-            return c[:255]
-    return mapeados[0][:255]
+    return "Otros sectores"
 
 
 def resumen_mapeo(valores_distintos: list[str]) -> dict[str, list[str] | int]:
