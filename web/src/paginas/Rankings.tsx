@@ -5,10 +5,32 @@ import { Aviso, Barras, Cargando, SelectorCorte, Titulo, useDatos } from "../com
 type Corte = { semestre: string; corte: string; ofertas: number };
 type Fila = { posicion: number; software: string; grupo: string; ofertas: number; porcentaje: number; variacion_pp?: number | null; corte_anterior?: string; total_ofertas_carrera: number };
 type FilaGc = { posicion: number; habilidad?: string; idioma?: string; ofertas: number; porcentaje: number; total_ofertas_carrera: number };
+type FilaDist = {
+  posicion: number;
+  tipo_oferta?: string;
+  sector?: string;
+  ofertas: number;
+  porcentaje: number;
+  variacion_pp?: number | null;
+  corte_anterior?: string;
+  total_ofertas_carrera: number;
+};
+type FilaCmpDist = {
+  tipo_oferta?: string;
+  sector?: string;
+  porcentaje_a: number;
+  porcentaje_b: number;
+  variacion_pp: number;
+  estado: string;
+  ofertas_a: number;
+  ofertas_b: number;
+};
 type Comparacion = {
   corte_a: { semestre: string; corte: string; total_ofertas: number; fuentes: string[] };
   corte_b: { semestre: string; corte: string; total_ofertas: number; fuentes: string[] };
   softwares: { software: string; grupo: string; porcentaje_a: number; porcentaje_b: number; variacion_pp: number; estado: string; ofertas_a: number; ofertas_b: number }[];
+  tipos_oferta: FilaCmpDist[];
+  sectores: FilaCmpDist[];
   advertencias: string[];
 };
 const CARRERAS = ["", "Administración de Empresas", "Contaduría Pública", "Economía"];
@@ -36,6 +58,10 @@ export default function Rankings() {
     sel ? `/analisis/ranking-habilidades${qs({ semestre: sem, corte: cor, carrera })}` : null, [sel, carrera]);
   const { datos: rkIdi } = useDatos<{ ranking: FilaGc[] }>(
     sel ? `/analisis/ranking-idiomas${qs({ semestre: sem, corte: cor, carrera })}` : null, [sel, carrera]);
+  const { datos: rkTipo } = useDatos<{ ranking: FilaDist[] }>(
+    sel ? `/analisis/ranking-tipo-oferta${qs({ semestre: sem, corte: cor, carrera })}` : null, [sel, carrera]);
+  const { datos: rkSector } = useDatos<{ ranking: FilaDist[] }>(
+    sel ? `/analisis/ranking-sector${qs({ semestre: sem, corte: cor, carrera })}` : null, [sel, carrera]);
   const [sa, ca] = a.split("|");
   const [sb, cb] = b.split("|");
   const { datos: cmp } = useDatos<Comparacion>(a && b ? `/analisis/comparar${qs({ semestre_a: sa, corte_a: ca, semestre_b: sb, corte_b: cb, carrera })}` : null, [a, b, carrera]);
@@ -97,6 +123,72 @@ export default function Rankings() {
           )}
         </div>
       ) : null}
+      {(rkTipo?.ranking?.length || rkSector?.ranking?.length) ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {rkTipo && (
+            <div className="tarjeta overflow-x-auto">
+              <h2 className="mb-2 font-semibold">
+                Tipo de oferta {rkTipo.ranking[0] && `· ${rkTipo.ranking[0].total_ofertas_carrera} ofertas`}
+              </h2>
+              <table className="tabla">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Tipo</th>
+                    <th>Ofertas</th>
+                    <th>%</th>
+                    <th>Variación vs. {rkTipo.ranking[0]?.corte_anterior || "anterior"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rkTipo.ranking.map((r) => (
+                    <tr key={r.tipo_oferta}>
+                      <td>{r.posicion}</td>
+                      <td className="font-medium">{r.tipo_oferta}</td>
+                      <td>{r.ofertas}</td>
+                      <td>{r.porcentaje.toFixed(1)} %</td>
+                      <td className={r.variacion_pp == null ? "text-texto-suave/70" : r.variacion_pp >= 0 ? "text-institucional" : "text-marina"}>
+                        {r.variacion_pp == null ? (r.corte_anterior ? "nuevo" : "—") : `${r.variacion_pp > 0 ? "+" : ""}${r.variacion_pp.toFixed(1)} pp`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {rkSector && (
+            <div className="tarjeta overflow-x-auto">
+              <h2 className="mb-2 font-semibold">
+                Sector de empresa {rkSector.ranking[0] && `· ${rkSector.ranking[0].total_ofertas_carrera} ofertas`}
+              </h2>
+              <table className="tabla">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Sector</th>
+                    <th>Ofertas</th>
+                    <th>%</th>
+                    <th>Variación vs. {rkSector.ranking[0]?.corte_anterior || "anterior"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rkSector.ranking.map((r) => (
+                    <tr key={r.sector}>
+                      <td>{r.posicion}</td>
+                      <td className="font-medium">{r.sector}</td>
+                      <td>{r.ofertas}</td>
+                      <td>{r.porcentaje.toFixed(1)} %</td>
+                      <td className={r.variacion_pp == null ? "text-texto-suave/70" : r.variacion_pp >= 0 ? "text-institucional" : "text-marina"}>
+                        {r.variacion_pp == null ? (r.corte_anterior ? "nuevo" : "—") : `${r.variacion_pp > 0 ? "+" : ""}${r.variacion_pp.toFixed(1)} pp`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : null}
       <div className="tarjeta overflow-x-auto">
         <h2 className="mb-2 font-semibold">Comparación entre cortes</h2>
         <div className="mb-3 flex flex-wrap items-end gap-3">
@@ -107,6 +199,7 @@ export default function Rankings() {
           <>
             {cmp.advertencias.map((x) => <Aviso key={x} tipo="alerta">{x}</Aviso>)}
             <p className="mb-2 text-xs text-texto-suave">A: {cmp.corte_a.total_ofertas} ofertas ({cmp.corte_a.fuentes.join(", ")}) · B: {cmp.corte_b.total_ofertas} ofertas ({cmp.corte_b.fuentes.join(", ")})</p>
+            <h3 className="mb-2 mt-4 text-sm font-semibold uppercase text-marina">Softwares</h3>
             <table className="tabla">
               <thead><tr><th>Software</th><th>Grupo</th><th>% A</th><th>% B</th><th>Variación</th><th>Estado</th></tr></thead>
               <tbody>{cmp.softwares.map((r) => (
@@ -115,6 +208,40 @@ export default function Rankings() {
                   <td className={`font-medium ${COLOR[r.estado] || ""}`}>{r.estado}</td></tr>
               ))}</tbody>
             </table>
+            {cmp.tipos_oferta?.length ? (
+              <>
+                <h3 className="mb-2 mt-6 text-sm font-semibold uppercase text-marina">Tipo de oferta</h3>
+                <table className="tabla">
+                  <thead><tr><th>Tipo</th><th>% A</th><th>% B</th><th>Variación</th><th>Estado</th></tr></thead>
+                  <tbody>{cmp.tipos_oferta.map((r) => (
+                    <tr key={r.tipo_oferta}>
+                      <td className="font-medium">{r.tipo_oferta}</td>
+                      <td>{r.porcentaje_a.toFixed(1)} %</td>
+                      <td>{r.porcentaje_b.toFixed(1)} %</td>
+                      <td>{r.variacion_pp > 0 ? "+" : ""}{r.variacion_pp.toFixed(1)} pp</td>
+                      <td className={`font-medium ${COLOR[r.estado] || ""}`}>{r.estado}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </>
+            ) : null}
+            {cmp.sectores?.length ? (
+              <>
+                <h3 className="mb-2 mt-6 text-sm font-semibold uppercase text-marina">Sector de empresa</h3>
+                <table className="tabla">
+                  <thead><tr><th>Sector</th><th>% A</th><th>% B</th><th>Variación</th><th>Estado</th></tr></thead>
+                  <tbody>{cmp.sectores.map((r) => (
+                    <tr key={r.sector}>
+                      <td className="font-medium">{r.sector}</td>
+                      <td>{r.porcentaje_a.toFixed(1)} %</td>
+                      <td>{r.porcentaje_b.toFixed(1)} %</td>
+                      <td>{r.variacion_pp > 0 ? "+" : ""}{r.variacion_pp.toFixed(1)} pp</td>
+                      <td className={`font-medium ${COLOR[r.estado] || ""}`}>{r.estado}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </>
+            ) : null}
           </>
         )}
       </div>

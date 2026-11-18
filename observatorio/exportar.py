@@ -221,7 +221,14 @@ def a_excel(s: Session, semestre: str | None = None, corte: str | None = None, i
     from openpyxl import Workbook
     from openpyxl.styles import Font
 
-    from observatorio.analisis import cortes_disponibles, ranking, ranking_habilidades, ranking_idiomas
+    from observatorio.analisis import (
+        cortes_disponibles,
+        ranking,
+        ranking_habilidades,
+        ranking_idiomas,
+        ranking_sector,
+        ranking_tipo_oferta,
+    )
 
     wb = Workbook(write_only=False)
     wb.remove(wb.active)
@@ -272,6 +279,24 @@ def a_excel(s: Session, semestre: str | None = None, corte: str | None = None, i
         for car in carreras:
             for r in ranking_idiomas(s, sem, cor, car):
                 ws.append([_texto(r.get(x)) if x not in ("porcentaje", "posicion", "ofertas") else r.get(x) for x in cab_i])
+    ws = wb.create_sheet("Ranking_TipoOferta")
+    cab_t = ["semestre", "corte", "carrera", "posicion", "tipo_oferta", "ofertas", "porcentaje", "variacion_pp", "corte_anterior"]
+    ws.append(cab_t)
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    for sem, cor in cortes:
+        for car in carreras:
+            for r in ranking_tipo_oferta(s, sem, cor, car):
+                ws.append([_texto(r.get(x)) if x not in ("porcentaje", "variacion_pp", "posicion", "ofertas") else r.get(x) for x in cab_t])
+    ws = wb.create_sheet("Ranking_Sector")
+    cab_s = ["semestre", "corte", "carrera", "posicion", "sector", "ofertas", "porcentaje", "variacion_pp", "corte_anterior"]
+    ws.append(cab_s)
+    for c in ws[1]:
+        c.font = Font(bold=True)
+    for sem, cor in cortes:
+        for car in carreras:
+            for r in ranking_sector(s, sem, cor, car):
+                ws.append([_texto(r.get(x)) if x not in ("porcentaje", "variacion_pp", "posicion", "ofertas") else r.get(x) for x in cab_s])
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()

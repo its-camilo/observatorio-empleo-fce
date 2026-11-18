@@ -15,6 +15,7 @@ from observatorio.filtro_ofertas import oferta_incluida_en_resultados
 
 ORDEN_CORTE = {"Inicio": 1, "Mitad": 2, "Final": 3}
 UMBRAL_IGUAL_PP = 0.5  # variación menor a 0,5 puntos porcentuales = "igual"
+ETIQUETA_SIN_DATO = "No especificado"
 
 
 def clave_corte(semestre: str, corte: str) -> tuple:
@@ -134,9 +135,17 @@ def comparar(s: Session, sem_a: str, corte_a: str, sem_b: str, corte_b: str, car
                       "porcentaje_a": pa, "ofertas_b": (b or {}).get("ofertas", 0), "porcentaje_b": pb,
                       "variacion_pp": round(pb - pa, 2), "estado": estado})
     filas.sort(key=lambda x: -abs(x["variacion_pp"]))
-    return {"carrera": carrera, "corte_a": {"semestre": sem_a, "corte": corte_a, **_meta_corte(s, sem_a, corte_a)},
-            "corte_b": {"semestre": sem_b, "corte": corte_b, **_meta_corte(s, sem_b, corte_b)}, "softwares": filas,
-            "advertencias": _advertencias_comparabilidad(s, sem_a, corte_a, sem_b, corte_b)}
+    tipos = _comparar_distribucion_campo(s, sem_a, corte_a, sem_b, corte_b, carrera, Oferta.tipo_oferta, "tipo_oferta")
+    sectores = _comparar_distribucion_campo(s, sem_a, corte_a, sem_b, corte_b, carrera, Oferta.sector, "sector")
+    return {
+        "carrera": carrera,
+        "corte_a": {"semestre": sem_a, "corte": corte_a, **_meta_corte(s, sem_a, corte_a)},
+        "corte_b": {"semestre": sem_b, "corte": corte_b, **_meta_corte(s, sem_b, corte_b)},
+        "softwares": filas,
+        "tipos_oferta": tipos,
+        "sectores": sectores,
+        "advertencias": _advertencias_comparabilidad(s, sem_a, corte_a, sem_b, corte_b),
+    }
 
 
 def _meta_corte(s: Session, semestre: str, corte: str) -> dict:
@@ -235,6 +244,144 @@ def resumen_corte(s: Session, semestre: str, corte: str, *, para_dashboard: bool
         salida["por_ciudad"] = dict(list(agrupar(Oferta.ciudad).items())[:15])
         salida["por_nivel"] = agrupar(Oferta.nivel_experiencia)
     return salida
+
+
+def _etiqueta_distribucion(valor: object | None) -> str:
+    t = (str(valor).strip() if valor is not None else "")
+    return t if t else ETIQUETA_SIN_DATO
+
+
+def _conteo_oferta_campo(s: Session, semestre: str, corte: str, columna) -> dict[str, Counter]:
+    conteo: dict[str, Counter] = defaultdict(Counter)
+    q = select(columna, Oferta.carrera).where(
+        Oferta.semestre == semestre,
+        Oferta.corte == corte,
+        oferta_incluida_en_resultados(),
+    )
+    for valor, carrera in s.execute(q):
+        etiqueta = _etiqueta_distribucion(valor)
+        conteo["Todas"][etiqueta] += 1
+        for x in (carrera or "").split("; "):
+            if x:
+                conteo[x][etiqueta] += 1
+    return conteo
+
+
+def _ordenar_distribucion(conteo: Counter) -> list[tuple[str, int]]:
+    items = [(k, v) for k, v in conteo.items() if k != ETIQUETA_SIN_DATO]
+    items.sort(key=lambda x: (-x[1], x[0]))
+    if ETIQUETA_SIN_DATO in conteo:
+        items.append((ETIQUETA_SIN_DATO, conteo[ETIQUETA_SIN_DATO]))
+    return items
+
+
+def _pct_distribucion(conteo: Counter, carrera: str, total: int) -> dict[str, float]:
+    if not total:
+        return {}
+    return {k: round(100 * v / total, 2) for k, v in conteo.get(carrera, Counter()).items()}
+
+
+def ranking_tipo_oferta(
+    s: Session, semestre: str, corte: str, carrera: str | None = None, con_variacion: bool = True
+) -> list[dict]:
+    """Distribución por `Oferta.tipo_oferta` (Empleo / Práctica·pasantía, etc.)."""
+    return _ranking_distribucion_campo(
+        s, semestre, corte, carrera, Oferta.tipo_oferta, "tipo_oferta", con_variacion=con_variacion
+    )
+
+
+def ranking_sector(
+    s: Session, semestre: str, corte: str, carrera: str | None = None, con_variacion: bool = True
+) -> list[dict]:
+    """Distribución por `Oferta.sector` industrial."""
+    return _ranking_distribucion_campo(
+        s, semestre, corte, carrera, Oferta.sector, "sector", con_variacion=con_variacion
+    )
+
+
+def _ranking_distribucion_campo(
+    s: Session,
+    semestre: str,
+    corte: str,
+    carrera: str | None,
+    columna,
+    clave_respuesta: str,
+    *,
+    con_variacion: bool,
+) -> list[dict]:
+    carrera = carrera or "Todas"
+    totales = _ofertas_por_carrera(s, semestre, corte)
+    conteo = _conteo_oferta_campo(s, semestre, corte, columna)
+    total = totales.get(carrera, 0)
+    prev = corte_anterior(s, semestre, corte) if con_variacion else None
+    pct_prev: dict[str, float] = {}
+    if prev:
+        tp = _ofertas_por_carrera(s, *prev)
+        cp = _conteo_oferta_campo(s, *prev, columna)
+        if tp.get(carrera):
+            pct_prev = _pct_distribucion(cp, carrera, tp[carrera])
+    salida = []
+    for i, (etiq, n) in enumerate(_ordenar_distribucion(conteo.get(carrera, Counter())), 1):
+        pct = round(100 * n / total, 2) if total else 0.0
+        fila = {
+            "posicion": i,
+            clave_respuesta: etiq,
+            "ofertas": n,
+            "porcentaje": pct,
+            "carrera": carrera,
+            "semestre": semestre,
+            "corte": corte,
+            "total_ofertas_carrera": total,
+        }
+        if prev:
+            fila["corte_anterior"] = f"{prev[0]} {prev[1]}"
+            fila["variacion_pp"] = round(pct - pct_prev[etiq], 2) if etiq in pct_prev else None
+        salida.append(fila)
+    return salida
+
+
+def _comparar_distribucion_campo(
+    s: Session,
+    sem_a: str,
+    corte_a: str,
+    sem_b: str,
+    corte_b: str,
+    carrera: str,
+    columna,
+    clave_respuesta: str,
+) -> list[dict]:
+    def mapa(sem: str, cor: str) -> dict[str, dict]:
+        rows = _ranking_distribucion_campo(s, sem, cor, carrera, columna, clave_respuesta, con_variacion=False)
+        return {r[clave_respuesta]: r for r in rows}
+
+    ra, rb = mapa(sem_a, corte_a), mapa(sem_b, corte_b)
+    filas = []
+    for etiq in sorted(set(ra) | set(rb), key=lambda x: (x == ETIQUETA_SIN_DATO, x)):
+        a, b = ra.get(etiq), rb.get(etiq)
+        pa, pb = (a or {}).get("porcentaje", 0.0), (b or {}).get("porcentaje", 0.0)
+        if a is None:
+            estado = "nuevo"
+        elif b is None:
+            estado = "desapareció"
+        elif pb - pa >= UMBRAL_IGUAL_PP:
+            estado = "subió"
+        elif pa - pb >= UMBRAL_IGUAL_PP:
+            estado = "bajó"
+        else:
+            estado = "igual"
+        filas.append(
+            {
+                clave_respuesta: etiq,
+                "ofertas_a": (a or {}).get("ofertas", 0),
+                "porcentaje_a": pa,
+                "ofertas_b": (b or {}).get("ofertas", 0),
+                "porcentaje_b": pb,
+                "variacion_pp": round(pb - pa, 2),
+                "estado": estado,
+            }
+        )
+    filas.sort(key=lambda x: (-abs(x["variacion_pp"]), x[clave_respuesta] != ETIQUETA_SIN_DATO, x[clave_respuesta]))
+    return filas
 
 
 def _conteo_relacional(
