@@ -157,6 +157,28 @@ def ranking_idiomas(semestre: str, corte: str, carrera: str | None = None, _: Us
     return {"ranking": analisis.ranking_idiomas(s, semestre, normalizar_corte(corte), carrera)}
 
 
+@router.get("/analisis/ranking-tipo-oferta")
+def ranking_tipo_oferta(
+    semestre: str,
+    corte: str,
+    carrera: str | None = None,
+    _: Usuario = Depends(usuario_actual),
+    s: Session = Depends(get_db),
+):
+    return {"ranking": analisis.ranking_tipo_oferta(s, semestre, normalizar_corte(corte), carrera)}
+
+
+@router.get("/analisis/ranking-sector")
+def ranking_sector(
+    semestre: str,
+    corte: str,
+    carrera: str | None = None,
+    _: Usuario = Depends(usuario_actual),
+    s: Session = Depends(get_db),
+):
+    return {"ranking": analisis.ranking_sector(s, semestre, normalizar_corte(corte), carrera)}
+
+
 @router.get("/analisis/comparar")
 def comparar(semestre_a: str, corte_a: str, semestre_b: str, corte_b: str, carrera: str | None = None,
              _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
