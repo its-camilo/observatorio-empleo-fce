@@ -13,6 +13,7 @@ from observatorio.pipeline.sector import (
     normalizar_sector,
     sector_desde_fuente,
 )
+from observatorio.pipeline.sectores_taxonomia import SECTORES_CANONICOS, sector_canonico
 
 
 def test_normalizar_sector_ingles_a_espanol():
@@ -26,7 +27,7 @@ def test_extraer_sector_computrabajo():
 
 
 def test_sector_desde_fuente_prioriza_metadato():
-    assert sector_desde_fuente("Retail", "Sector: Banca") == "Comercio minorista"
+    assert sector_desde_fuente("Retail", "Sector: Banca") == "Comercio al por menor"
 
 
 def test_limpieza_sector_desde_linea_ct():
@@ -72,6 +73,30 @@ def test_mapa_e_inferencia_por_empresa(sesion):
     sesion.commit()
     mapa = construir_mapa_sector_por_empresa(sesion, min_ofertas=2)
     assert inferir_sector_empresa("Acme Colombia", mapa) == "Banca"
+
+
+def test_taxonomia_canonica_limite_y_compuestos():
+    assert len(SECTORES_CANONICOS) <= 100
+    assert sector_canonico("Consulting And Business Services") == "Consultoría y servicios a empresas"
+    assert sector_canonico("Banca y Servicios financieros") == "Banca"
+    assert sector_canonico(
+        "Servicios financieros, Servicios y consultoría de TI y Tecnología, información e internet"
+    ) == "Servicios financieros"
+
+
+def test_backfill_renormaliza_sector_existente(sesion):
+    sesion.add(_oferta("r1", "Unico SA", "Consulting And Business Services"))
+    sesion.add(_oferta("r2", "Unico SA", "Retail"))
+    sesion.commit()
+    prev = backfill_sectores(sesion, aplicar=False)
+    assert prev["ofertas_renormalizadas"] == 2
+    assert prev["sectores_distintos_antes"] == 2
+    assert prev["sectores_distintos_despues"] <= 2
+    assert sesion.get(Oferta, "r1").sector == "Consulting And Business Services"
+    backfill_sectores(sesion, aplicar=True)
+    sesion.commit()
+    assert sesion.get(Oferta, "r1").sector == "Consultoría y servicios a empresas"
+    assert sesion.get(Oferta, "r2").sector == "Comercio al por menor"
 
 
 def test_backfill_sector_vista_previa_y_aplicar(sesion):
