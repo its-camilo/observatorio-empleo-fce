@@ -14,11 +14,12 @@ type Props = {
   descripcion: string;
   claves: string[];
   valores: Record<string, number>;
+  defecto?: Record<string, number>;
   admin: boolean;
   alGuardar: () => void;
 };
 
-export default function EditorDistribucion({ clave, titulo, descripcion, claves, valores, admin, alGuardar }: Props) {
+export default function EditorDistribucion({ clave, titulo, descripcion, claves, valores, defecto, admin, alGuardar }: Props) {
   const inicial = useMemo(() => {
     const o: Record<string, string> = {};
     for (const k of claves) {
@@ -48,6 +49,16 @@ export default function EditorDistribucion({ clave, titulo, descripcion, claves,
     } catch (e) {
       setMsg({ tipo: "error", t: (e as Error).message });
     }
+  };
+
+  const restablecer = () => {
+    const base = defecto ?? valores;
+    const next: Record<string, string> = {};
+    for (const k of claves) {
+      next[k] = String(base[k] ?? 0);
+    }
+    setCampos(next);
+    setMsg(null);
   };
 
   const normalizar = async () => {
@@ -108,6 +119,11 @@ export default function EditorDistribucion({ clave, titulo, descripcion, claves,
           <button type="button" className="btn-sec" onClick={normalizar}>
             Normalizar a 100 %
           </button>
+          {defecto && (
+            <button type="button" className="btn-sec" onClick={restablecer}>
+              Restablecer valores por defecto
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -40,7 +40,7 @@ def test_put_distribucion_rechaza_suma(cliente, headers_admin):
         json={"valor": {"linkedin": 50, "indeed": 30, "computrabajo": 10}},
         headers=headers_admin,
     )
-    assert r.status_code == 400
+    assert r.status_code == 422
 
 
 def test_normalizar_endpoint(cliente, headers_admin):

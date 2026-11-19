@@ -1,46 +1,25 @@
-import { useState } from "react";
-import { api } from "../api";
+import { useCallback } from "react";
 import { useEsAdmin } from "../main";
-import EditorDistribucion from "../componentes/EditorDistribucion";
-import EditorNivelesExperiencia from "../componentes/EditorNivelesExperiencia";
+import {
+  EditorJsonAvanzado,
+  EditorParametro,
+  ordenarParams,
+  type ParamConfig,
+} from "../configuracion/EditorParametro";
 import { Aviso, Cargando, Titulo, useDatos } from "../componentes/ui";
 
-type Param = { clave: string; valor: unknown; descripcion: string };
-
-const FUENTES_ORDEN = ["linkedin", "indeed", "computrabajo"];
-const OCULTOS_JSON = new Set(["distribucion_fuentes", "distribucion_carreras", "niveles_experiencia"]);
-
-function Editor({ p, admin, alGuardar }: { p: Param; admin: boolean; alGuardar: () => void }) {
-  const [texto, setTexto] = useState(JSON.stringify(p.valor, null, 2));
-  const [msg, setMsg] = useState<{ tipo: "ok" | "error"; t: string } | null>(null);
-  const guardar = async () => {
-    try {
-      await api.put(`/config/${p.clave}`, { valor: JSON.parse(texto) });
-      setMsg({ tipo: "ok", t: "Guardado. Aplica desde la próxima ejecución." });
-      alGuardar();
-    } catch (e) {
-      setMsg({ tipo: "error", t: e instanceof SyntaxError ? "El texto no es JSON válido." : (e as Error).message });
-    }
-  };
-  return (
-    <details className="tarjeta">
-      <summary className="cursor-pointer">
-        <b>{p.clave}</b> <span className="text-sm text-texto-suave">— {p.descripcion}</span>
-      </summary>
-      <textarea className="campo mt-2 h-64 w-full font-mono text-xs" disabled={!admin} value={texto} onChange={(e) => setTexto(e.target.value)} />
-      {msg && <Aviso tipo={msg.tipo}>{msg.t}</Aviso>}
-      {admin && (
-        <button className="btn" type="button" onClick={guardar}>
-          Guardar
-        </button>
-      )}
-    </details>
-  );
-}
+type Param = ParamConfig;
 
 export function ConfiguracionGeneral({ embebido = false }: { embebido?: boolean }) {
   const admin = useEsAdmin();
   const { datos, error, recargar } = useDatos<Param[]>("/config");
+  const extras = useDatos<Param[]>(admin ? "/config/extras" : null);
+
+  const recargarTodo = useCallback(() => {
+    recargar();
+    if (admin) extras.recargar();
+  }, [admin, recargar, extras]);
+
   if (error) return <Aviso tipo="error">{error}</Aviso>;
   if (!datos) return <Cargando />;
 
@@ -49,50 +28,53 @@ export function ConfiguracionGeneral({ embebido = false }: { embebido?: boolean 
   const distFuentes = (mapa.distribucion_fuentes?.valor as Record<string, number>) || {};
   const distCarreras = (mapa.distribucion_carreras?.valor as Record<string, number>) || {};
 
+  const lista = ordenarParams(
+    datos.map((p) => ({
+      ...p,
+      defecto: p.defecto ?? null,
+    })),
+  );
+
   return (
     <div className="space-y-3">
       {!embebido && <Titulo>Configuración</Titulo>}
       <Aviso>
-        Parámetros de búsqueda y del procesamiento (fuentes, ciudades, ventana de días, límites, meta, reglas de carrera, IA, cursos).
-        {admin ? " Edite con cuidado: el formato avanzado es JSON." : " Solo los administradores pueden editarlos."}
+        Parámetros de búsqueda y del procesamiento (fuentes, ciudades, ventana de días, límites, reglas de carrera, cursos).
+        {admin
+          ? " Use los formularios; las claves heredadas solo aparecen en JSON avanzado."
+          : " Solo los administradores pueden editarlos."}
       </Aviso>
 
-      <EditorDistribucion
-        clave="distribucion_fuentes"
-        titulo="Reparto entre fuentes"
-        descripcion={
-          mapa.distribucion_fuentes?.descripcion ||
-          "Porcentaje del objetivo de extracción por fuente (suma 100). 0 % desactiva la fuente."
-        }
-        claves={FUENTES_ORDEN}
-        valores={distFuentes}
-        admin={admin}
-        alGuardar={recargar}
-      />
-      <EditorDistribucion
-        clave="distribucion_carreras"
-        titulo="Reparto entre carreras"
-        descripcion={mapa.distribucion_carreras?.descripcion || "Porcentaje del objetivo de extracción por carrera (suma 100)."}
-        claves={carreras}
-        valores={distCarreras}
-        admin={admin}
-        alGuardar={recargar}
-      />
-
-      {mapa.niveles_experiencia && (
-        <EditorNivelesExperiencia
-          descripcion={mapa.niveles_experiencia.descripcion}
-          valorInicial={mapa.niveles_experiencia.valor}
+      {lista.map((p) => (
+        <EditorParametro
+          key={p.clave}
+          p={p}
           admin={admin}
-          alGuardar={recargar}
+          alGuardar={recargarTodo}
+          carreras={carreras}
+          distFuentes={distFuentes}
+          distCarreras={distCarreras}
         />
-      )}
+      ))}
 
-      {datos
-        .filter((p) => !OCULTOS_JSON.has(p.clave))
-        .map((p) => (
-          <Editor key={p.clave} p={p} admin={admin} alGuardar={recargar} />
-        ))}
+      {admin && extras.datos && extras.datos.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="titulo-seccion text-base md:text-lg">Parámetros avanzados (JSON)</h2>
+          <p className="text-sm text-texto-suave">
+            Claves heredadas de la base de datos sin formulario dedicado. Valide la sintaxis antes de guardar.
+          </p>
+          {extras.datos.map((e) => (
+            <EditorJsonAvanzado
+              key={e.clave}
+              clave={e.clave}
+              valor={e.valor}
+              descripcion={e.descripcion}
+              admin={admin}
+              alGuardar={recargarTodo}
+            />
+          ))}
+        </section>
+      )}
     </div>
   );
 }

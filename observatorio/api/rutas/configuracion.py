@@ -21,7 +21,8 @@ from observatorio.db.modelos import (
     Usuario,
 )
 from observatorio.distribucion import FUENTES_EXTRACCION, normalizar_porcentajes, validar_distribucion
-from observatorio.parametros import POR_DEFECTO, leer_config
+from observatorio.config_esquemas import validar_valor_config
+from observatorio.parametros import POR_DEFECTO, leer_config, valores_por_defecto
 router = APIRouter()
 
 
@@ -342,26 +343,28 @@ class ValorConfig(BaseModel):
 @router.get("/config")
 def ver_config(_: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
     cfg = leer_config(s)
-    return [{"clave": k, "valor": cfg.get(k), "descripcion": POR_DEFECTO[k]["descripcion"]} for k in POR_DEFECTO]
+    defectos = valores_por_defecto()
+    return [
+        {
+            "clave": k,
+            "valor": cfg.get(k),
+            "descripcion": POR_DEFECTO[k]["descripcion"],
+            "defecto": defectos.get(k),
+        }
+        for k in POR_DEFECTO
+    ]
 
 
-def _validar_valor_config(clave: str, valor, cfg: dict):
-    if clave == "distribucion_fuentes":
-        if not isinstance(valor, dict):
-            raise HTTPException(400, "distribucion_fuentes debe ser un objeto con porcentajes.")
-        try:
-            return validar_distribucion(valor, claves=list(FUENTES_EXTRACCION))
-        except ValueError as e:
-            raise HTTPException(400, str(e)) from e
-    if clave == "distribucion_carreras":
-        if not isinstance(valor, dict):
-            raise HTTPException(400, "distribucion_carreras debe ser un objeto con porcentajes.")
-        carreras = list(cfg.get("carreras") or [])
-        try:
-            return validar_distribucion(valor, claves=carreras)
-        except ValueError as e:
-            raise HTTPException(400, str(e)) from e
-    return valor
+@router.get("/config/extras")
+def ver_config_extras(admin: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
+    """Claves en la base que no están en POR_DEFECTO (edición JSON avanzada)."""
+    conocidas = set(POR_DEFECTO)
+    out = []
+    for fila in s.query(Config).order_by(Config.clave):
+        if fila.clave in conocidas:
+            continue
+        out.append({"clave": fila.clave, "valor": fila.valor, "descripcion": fila.descripcion or ""})
+    return out
 
 
 @router.post("/config/distribucion/normalizar")
@@ -397,17 +400,26 @@ def normalizar_distribucion(
 
 @router.put("/config/{clave}")
 def editar_config(clave: str, d: ValorConfig, admin: Usuario = Depends(solo_admin), s: Session = Depends(get_db)):
-    if clave not in POR_DEFECTO:
-        raise HTTPException(404, "Parámetro desconocido")
-    esperado = type(POR_DEFECTO[clave]["valor"])
-    if not isinstance(d.valor, esperado) and not (esperado is int and isinstance(d.valor, float)):
-        raise HTTPException(400, f"El valor debe ser de tipo {esperado.__name__} (como el valor por defecto).")
     cfg = leer_config(s)
-    d.valor = _validar_valor_config(clave, d.valor, cfg)
+    if clave in POR_DEFECTO:
+        try:
+            valor = validar_valor_config(clave, d.valor, cfg)
+        except (ValueError, TypeError) as e:
+            raise HTTPException(422, str(e)) from e
+        desc = POR_DEFECTO[clave]["descripcion"]
+    else:
+        fila_prev = s.get(Config, clave)
+        if fila_prev is None:
+            raise HTTPException(404, "Parámetro desconocido")
+        if d.valor is None:
+            raise HTTPException(422, "El valor no puede ser nulo.")
+        valor = d.valor
+        desc = fila_prev.descripcion or ""
     fila = s.get(Config, clave)
     if fila is None:
-        fila = Config(clave=clave, descripcion=POR_DEFECTO[clave]["descripcion"])
+        fila = Config(clave=clave, descripcion=desc)
         s.add(fila)
-    fila.valor = d.valor
+    fila.valor = valor
     fila.actualizado_por = admin.email
+    s.commit()
     return {"clave": clave, "valor": fila.valor}

@@ -31,11 +31,13 @@ function normalizarValor(raw: unknown): ValorNiveles {
 export default function EditorNivelesExperiencia({
   descripcion,
   valorInicial,
+  defecto,
   admin,
   alGuardar,
 }: {
   descripcion: string;
   valorInicial: unknown;
+  defecto?: unknown;
   admin: boolean;
   alGuardar: () => void;
 }) {
@@ -43,6 +45,15 @@ export default function EditorNivelesExperiencia({
   const [modo, setModo] = useState<Modo>(base.modo);
   const [niveles, setNiveles] = useState<string[]>(base.modo === "algunos" ? base.niveles : []);
   const [msg, setMsg] = useState<{ tipo: "ok" | "error"; t: string } | null>(null);
+
+  const invalido = modo === "algunos" && niveles.length === 0;
+
+  const restablecer = () => {
+    const d = normalizarValor(defecto ?? valorInicial);
+    setModo(d.modo);
+    setNiveles(d.modo === "algunos" ? d.niveles : []);
+    setMsg(null);
+  };
 
   const toggle = (n: string) => {
     setNiveles((prev) => (prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n]));
@@ -107,10 +118,18 @@ export default function EditorNivelesExperiencia({
         )}
       </fieldset>
       {msg && <Aviso tipo={msg.tipo}>{msg.t}</Aviso>}
+      {invalido && <p className="mt-2 text-sm text-red-700">Elija al menos un nivel o use la opción «todos».</p>}
       {admin && (
-        <button className="btn mt-2" type="button" onClick={guardar}>
-          Guardar
-        </button>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button className="btn" type="button" onClick={guardar} disabled={invalido}>
+            Guardar
+          </button>
+          {defecto !== undefined && (
+            <button className="btn-sec" type="button" onClick={restablecer}>
+              Restablecer valores por defecto
+            </button>
+          )}
+        </div>
       )}
     </details>
   );
