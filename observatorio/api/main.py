@@ -13,6 +13,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -63,6 +64,7 @@ def _preparar_bd() -> None:
 def crear_app() -> FastAPI:
     app = FastAPI(title="Observatorio de Empleo FCE", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json",
                   description="API del Observatorio de Empleo de la Facultad de Ciencias Económicas (UNAL).")
+    app.add_middleware(GZipMiddleware, minimum_size=512)
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
                        expose_headers=["Content-Disposition", "Mcp-Session-Id"])
     for r in (auth_usuarios.router, configuracion.router, datos.router):

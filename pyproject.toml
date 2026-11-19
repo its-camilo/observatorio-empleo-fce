@@ -15,7 +15,6 @@ dependencies = [
     "python-dotenv>=1.0",
     "pydantic>=2.6",
     "mcp>=2.3,<3",
-    "scipy>=1.11",
 ]
 
 [tool.setuptools.packages.find]
