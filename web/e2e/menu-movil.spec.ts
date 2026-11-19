@@ -5,11 +5,7 @@ const ENLACES_USUARIO = [
   { texto: "Inicio", ruta: "/" },
   { texto: "Ofertas", ruta: "/ofertas" },
   { texto: "Rankings y comparación", ruta: "/rankings" },
-  { texto: "Validación", ruta: "/validacion" },
-  { texto: "Cursos en tendencia", ruta: "/cursos" },
-  { texto: "Temas para dictar", ruta: "/temas-recomendados" },
   { texto: "Configuración", ruta: "/configuracion" },
-  { texto: "Tokens MCP", ruta: "/tokens-mcp" },
 ];
 
 const RESUMEN_DASHBOARD = {

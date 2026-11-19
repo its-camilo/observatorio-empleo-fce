@@ -22,11 +22,6 @@ const Ejecuciones = lazy(() => import("./paginas/Ejecuciones"));
 const Ofertas = lazy(() => import("./paginas/Ofertas"));
 const Rankings = lazy(() => import("./paginas/Rankings"));
 const ConfiguracionHub = lazy(() => import("./paginas/ConfiguracionHub"));
-const Validacion = lazy(() => import("./paginas/Validacion"));
-const Usuarios = lazy(() => import("./paginas/Usuarios"));
-const Cursos = lazy(() => import("./paginas/Cursos"));
-const TemasRecomendados = lazy(() => import("./paginas/TemasRecomendados"));
-const TokensMcp = lazy(() => import("./paginas/TokensMcp"));
 
 type Ctx = { sesion: Sesion | null; setSesion: (s: Sesion | null) => void };
 const SesionCtx = createContext<Ctx>({ sesion: null, setSesion: () => {} });
@@ -38,12 +33,7 @@ const MENU: { a: string; texto: string; admin?: boolean }[] = [
   { a: "/corridas", texto: "Corridas", admin: true },
   { a: "/ofertas", texto: "Ofertas" },
   { a: "/rankings", texto: "Rankings y comparación" },
-  { a: "/validacion", texto: "Validación" },
-  { a: "/cursos", texto: "Cursos en tendencia" },
-  { a: "/temas-recomendados", texto: "Temas para dictar" },
   { a: "/configuracion", texto: "Configuración" },
-  { a: "/usuarios", texto: "Usuarios", admin: true },
-  { a: "/tokens-mcp", texto: "Tokens MCP" },
 ];
 
 function PieInstitucional() {
@@ -145,11 +135,11 @@ function App() {
             <Route path="/terminos" element={<Navigate to="/configuracion/terminos" replace />} />
             <Route path="/no-catalogados" element={<Navigate to="/configuracion/no-catalogados" replace />} />
             <Route path="/catalogo-gc" element={<Navigate to="/configuracion/habilidades-idiomas" replace />} />
-            <Route path="/validacion" element={<Validacion />} />
-            <Route path="/cursos" element={<Cursos />} />
-            <Route path="/temas-recomendados" element={<TemasRecomendados />} />
-            <Route path="/usuarios" element={<SoloAdmin><Usuarios /></SoloAdmin>} />
-            <Route path="/tokens-mcp" element={<TokensMcp />} />
+            <Route path="/validacion" element={<Navigate to="/configuracion/validacion" replace />} />
+            <Route path="/cursos" element={<Navigate to="/rankings?tab=cursos" replace />} />
+            <Route path="/temas-recomendados" element={<Navigate to="/rankings?tab=temas" replace />} />
+            <Route path="/usuarios" element={<Navigate to="/configuracion/usuarios" replace />} />
+            <Route path="/tokens-mcp" element={<Navigate to="/configuracion/tokens-mcp" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

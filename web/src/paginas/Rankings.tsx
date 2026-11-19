@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { qs } from "../api";
 import { Aviso, Barras, Cargando, SelectorCorte, Titulo, useDatos } from "../componentes/ui";
+import Cursos from "./Cursos";
+import TemasRecomendados from "./TemasRecomendados";
 
 type Corte = { semestre: string; corte: string; ofertas: number };
 type Fila = {
@@ -62,9 +64,13 @@ const PESTANAS = [
   { id: "tipo-oferta", label: "Tipo de oferta" },
   { id: "sector", label: "Sector" },
   { id: "comparar", label: "Comparar cortes" },
+  { id: "cursos", label: "Cursos en tendencia" },
+  { id: "temas", label: "Temas para dictar" },
 ] as const;
 
 type TabId = (typeof PESTANAS)[number]["id"];
+
+const PESTANAS_FILTRO_CORTE = new Set<TabId>(["general", "competencias", "tipo-oferta", "sector"]);
 
 const TAB_IDS = new Set<string>(PESTANAS.map((p) => p.id));
 
@@ -472,31 +478,35 @@ export default function Rankings() {
   const [sem, cor] = sel.split("|");
   const filtrosListos = Boolean(sem && cor);
   const compararListo = Boolean(a && b);
+  const usaFiltroCorte = PESTANAS_FILTRO_CORTE.has(tab);
+  const tabAutonoma = tab === "cursos" || tab === "temas";
 
   if (error) return <Aviso tipo="error">{error}</Aviso>;
   if (!cortes) return <Cargando />;
-  if (!cortes.length) return <Aviso>Aún no hay datos. Lance una corrida primero.</Aviso>;
+  if (!cortes.length && !tabAutonoma) return <Aviso>Aún no hay datos. Lance una corrida primero.</Aviso>;
 
   return (
     <div className="space-y-4">
       <Titulo>Rankings y comparación</Titulo>
 
-      <div className="tarjeta flex flex-wrap items-end gap-3">
-        <div>
-          <label className="etiqueta">{tab === "comparar" ? "Semestre y corte (B)" : "Semestre y corte"}</label>
-          <SelectorCorte cortes={cortes} valor={sel} onCambio={onCortePrincipal} />
+      {usaFiltroCorte && (
+        <div className="tarjeta flex flex-wrap items-end gap-3">
+          <div>
+            <label className="etiqueta">Semestre y corte</label>
+            <SelectorCorte cortes={cortes} valor={sel} onCambio={onCortePrincipal} />
+          </div>
+          <div>
+            <label className="etiqueta">Carrera</label>
+            <select className="campo" value={carrera} onChange={(e) => setCarrera(e.target.value)}>
+              {CARRERAS.map((c) => (
+                <option key={c} value={c}>
+                  {c || "Todas"}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div>
-          <label className="etiqueta">Carrera</label>
-          <select className="campo" value={carrera} onChange={(e) => setCarrera(e.target.value)}>
-            {CARRERAS.map((c) => (
-              <option key={c} value={c}>
-                {c || "Todas"}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      )}
 
       <nav
         className="-mx-1 flex gap-2 overflow-x-auto border-b border-niebla px-1 pb-2"
@@ -517,12 +527,22 @@ export default function Rankings() {
         ))}
       </nav>
 
-      {tab !== "comparar" && !filtrosListos ? (
+      {usaFiltroCorte && !filtrosListos ? (
         <Aviso>Elija un corte para ver los rankings.</Aviso>
       ) : tab === "comparar" && !compararListo ? (
         <Aviso>Elija los dos cortes a comparar.</Aviso>
       ) : (
         <>
+          {montados.cursos && (
+            <div className={tab === "cursos" ? "" : "hidden"} aria-hidden={tab !== "cursos"}>
+              <Cursos embebido />
+            </div>
+          )}
+          {montados.temas && (
+            <div className={tab === "temas" ? "" : "hidden"} aria-hidden={tab !== "temas"}>
+              <TemasRecomendados embebido />
+            </div>
+          )}
           {montados.general && (
             <div className={tab === "general" ? "" : "hidden"} aria-hidden={tab !== "general"}>
               {filtrosListos && <PestanaGeneral sem={sem} cor={cor} carrera={carrera} />}

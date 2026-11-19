@@ -15,7 +15,7 @@ type Tema = {
   corte: string;
 };
 
-export default function TemasRecomendados() {
+export default function TemasRecomendados({ embebido = false }: { embebido?: boolean }) {
   const [semestre, setSemestre] = useState("2026-II");
   const [corte, setCorte] = useState("Mitad");
   const [carrera, setCarrera] = useState("");
@@ -25,7 +25,8 @@ export default function TemasRecomendados() {
 
   return (
     <div className="space-y-4">
-      <Titulo>Temas recomendados para dictar</Titulo>
+      {!embebido && <Titulo>Temas recomendados para dictar</Titulo>}
+      {embebido && <h2 className="font-semibold">Temas para dictar</h2>}
       <Aviso>
         Prioridades de cursos libres y gestión del conocimiento (FCE): habilidades y software que más piden las ofertas guardadas del corte,
         con referencias en Coursera, edX y Platzi. La variación compara el porcentaje de ofertas con el corte anterior si existe.

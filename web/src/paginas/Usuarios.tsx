@@ -4,7 +4,7 @@ import { Aviso, Cargando, Titulo, useDatos } from "../componentes/ui";
 
 type U = { id: number; email: string; nombre: string | null; rol: string; estado: string; creado_en: string; ultimo_acceso: string | null };
 
-export default function Usuarios() {
+export default function Usuarios({ embebido = false }: { embebido?: boolean }) {
   const { datos, error, recargar } = useDatos<U[]>("/usuarios");
   const [err, setErr] = useState<string | null>(null);
   const cambiar = async (u: U, cambio: Partial<U>) => {
@@ -16,7 +16,8 @@ export default function Usuarios() {
   const pendientes = datos.filter((u) => u.estado === "pendiente").length;
   return (
     <div className="space-y-4">
-      <Titulo>Usuarios</Titulo>
+      {!embebido && <Titulo>Usuarios</Titulo>}
+      {embebido && <h2 className="font-semibold">Usuarios</h2>}
       {pendientes > 0 && <Aviso tipo="alerta">{pendientes} usuario(s) esperan aprobación.</Aviso>}
       {err && <Aviso tipo="error">{err}</Aviso>}
       <div className="tarjeta tabla-contenedor">

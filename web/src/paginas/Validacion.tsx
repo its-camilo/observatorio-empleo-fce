@@ -69,7 +69,7 @@ function Revision({ id, alCambiar, admin }: { id: string; alCambiar: () => void;
   );
 }
 
-export default function Validacion() {
+export default function Validacion({ embebido = false }: { embebido?: boolean }) {
   const admin = useEsAdmin();
   const { datos: cortes } = useDatos<{ semestre: string; corte: string; ofertas: number }[]>("/analisis/cortes");
   const { datos: muestras, recargar } = useDatos<Muestra[]>("/validacion/muestras");
@@ -89,7 +89,8 @@ export default function Validacion() {
   };
   return (
     <div className="space-y-4">
-      <Titulo>Validación manual (meta 90 %)</Titulo>
+      {!embebido && <Titulo>Validación manual (meta 90 %)</Titulo>}
+      {embebido && <h2 className="font-semibold">Validación manual (meta 90 %)</h2>}
       <Aviso>Se toma una muestra aleatoria de ofertas de un corte. Para cada una, revise si los softwares detectados coinciden con lo que pide la oferta y márquela como correcta o incorrecta.</Aviso>
       {err && <Aviso tipo="error">{err}</Aviso>}
       <div className="tarjeta flex flex-wrap items-end gap-2">

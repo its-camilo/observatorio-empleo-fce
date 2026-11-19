@@ -4,7 +4,7 @@ import { Aviso, Cargando, Titulo, useDatos } from "../componentes/ui";
 
 type Token = { id: number; nombre: string; prefijo: string; revocado: boolean; creado_en: string; ultimo_uso: string | null };
 
-export default function TokensMcp() {
+export default function TokensMcp({ embebido = false }: { embebido?: boolean }) {
   const { datos, error, recargar } = useDatos<Token[]>("/tokens-mcp");
   const [nombre, setNombre] = useState("Claude de escritorio");
   const [nuevo, setNuevo] = useState<string | null>(null);
@@ -20,7 +20,8 @@ export default function TokensMcp() {
   };
   return (
     <div className="space-y-4">
-      <Titulo>Tokens del servidor MCP</Titulo>
+      {!embebido && <Titulo>Tokens del servidor MCP</Titulo>}
+      {embebido && <h2 className="font-semibold">Tokens del servidor MCP</h2>}
       <Aviso>
         El servidor MCP <code className="font-mono">{url}</code> es público y de solo lectura. Su token personal hereda su rol: con cuenta
         de usuario amplía las mismas consultas que la sesión web; los administradores además ven <b>estado_corrida</b> y <b>lanzar_corrida</b>. Envíe el token en la cabecera

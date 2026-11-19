@@ -5,10 +5,7 @@ const RUTA_API: Record<string, string> = {
   "/": "/dashboard",
   "/ofertas": "/ofertas/filtros",
   "/rankings": "/analisis/cortes",
-  "/cursos": "/cursos",
-  "/temas-recomendados": "/temas-recomendados",
   "/configuracion": "/config",
-  "/validacion": "/validacion/muestras",
 };
 
 export function prefetchNav(rutaMenu: string) {

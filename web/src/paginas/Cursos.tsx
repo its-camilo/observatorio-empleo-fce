@@ -20,7 +20,7 @@ type Curso = {
   corte: string;
 };
 
-export default function Cursos() {
+export default function Cursos({ embebido = false }: { embebido?: boolean }) {
   const [plataforma, setPlataforma] = useState("");
   const [termino, setTermino] = useState("");
   const [carrera, setCarrera] = useState("");
@@ -31,7 +31,8 @@ export default function Cursos() {
   ]);
   return (
     <div className="space-y-4">
-      <Titulo>Cursos en tendencia</Titulo>
+      {!embebido && <Titulo>Cursos en tendencia</Titulo>}
+      {embebido && <h2 className="font-semibold">Cursos en tendencia</h2>}
       <Aviso>
         Cursos buscados según la demanda en ofertas guardadas del corte (no una lista fija). Ordenados por puntaje de recomendación
         (demanda en ofertas + señal de la plataforma).
