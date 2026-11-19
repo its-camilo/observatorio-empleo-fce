@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { descargar, qs } from "../api";
-import { Aviso, Cargando, Titulo, useDatos } from "../componentes/ui";
+import { Aviso, Cargando, EsqueletoLinea, Titulo, useDatos } from "../componentes/ui";
 
 type Filtros = {
   semestres: string[]; cortes: string[]; fuentes: string[]; ciudades: string[]; tipos_oferta: string[];
@@ -33,7 +33,7 @@ export default function Ofertas() {
   const [aplicados, setAplicados] = useState(VACIO);
   const [pagina, setPagina] = useState(1);
   const [abierta, setAbierta] = useState<Oferta | null>(null);
-  const { datos, error, cargando } = useDatos<Pagina>(`/ofertas${qs({ ...aplicados, pagina, tamano: 25 })}`, [aplicados, pagina]);
+  const { datos, error, cargando, actualizando } = useDatos<Pagina>(`/ofertas${qs({ ...aplicados, pagina, tamano: 25 })}`, [aplicados, pagina]);
   const { datos: detalle } = useDatos<Oferta>(abierta ? `/ofertas/${encodeURIComponent(abierta.id_oferta)}` : null, [abierta]);
   const cambiar = (k: keyof typeof VACIO) => (v: string) => setF({ ...f, [k]: v });
   const [errDesc, setErrDesc] = useState<string | null>(null);
@@ -94,9 +94,19 @@ export default function Ofertas() {
         </div>
       </div>
       {error && <Aviso tipo="error">{error}</Aviso>}
+      {cargando && !datos && (
+        <div className="tarjeta tabla-contenedor space-y-3" aria-busy>
+          <EsqueletoLinea className="h-4 w-36" />
+          {Array.from({ length: 8 }).map((_, i) => (
+            <EsqueletoLinea key={i} className="h-10 w-full" />
+          ))}
+        </div>
+      )}
       {datos && (
         <div className="tarjeta tabla-contenedor">
-          <div className="mb-2 text-sm text-texto-suave">{datos.total.toLocaleString("es-CO")} ofertas {cargando && "· actualizando…"}</div>
+          <div className="mb-2 text-sm text-texto-suave">
+            {datos.total.toLocaleString("es-CO")} ofertas {actualizando && "· actualizando…"}
+          </div>
           <table className="tabla">
             <thead><tr><th>Cargo</th><th>Empresa</th><th>Ciudad</th><th>Carrera</th><th>Tipo / nivel</th><th>Softwares</th><th>Fuente</th><th>Publicada</th></tr></thead>
             <tbody>

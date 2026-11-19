@@ -1,4 +1,5 @@
-import { ReactNode, useCallback, useEffect, useState } from "react";
+import { ReactNode, useCallback } from "react";
+import useSWR from "swr";
 import { api } from "../api";
 
 export function Titulo({ children, extra }: { children: ReactNode; extra?: ReactNode }) {
@@ -106,28 +107,36 @@ export function EstadoChip({ estado }: { estado: string }) {
   );
 }
 
-/** Hook mínimo para cargar datos de la API con estado de carga y error. */
+const swrFetcher = <T,>(ruta: string) => api.get<T>(ruta, { cache: true });
+
+/** Datos de la API con SWR (stale-while-revalidate, caché en memoria del cliente). */
 export function useDatos<T>(ruta: string | null, deps: unknown[] = []) {
-  const [datos, setDatos] = useState<T | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [cargando, setCargando] = useState(false);
-  const recargar = useCallback(async () => {
-    if (!ruta) return;
-    setCargando(true);
-    setError(null);
-    try {
-      setDatos(await api.get<T>(ruta, { cache: true }));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setCargando(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ruta, ...deps]);
-  useEffect(() => {
-    recargar();
-  }, [recargar]);
-  return { datos, error, cargando, recargar, setDatos };
+  const key = ruta ? `${ruta}\0${JSON.stringify(deps)}` : null;
+  const { data, error, isLoading, isValidating, mutate } = useSWR<T>(
+    key,
+    () => swrFetcher<T>(ruta!),
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 90_000,
+      keepPreviousData: true,
+    },
+  );
+  const recargar = useCallback(() => mutate(), [mutate]);
+  const setDatos = useCallback(
+    (v: T | ((prev: T | undefined) => T)) => {
+      void mutate(v, { revalidate: false });
+    },
+    [mutate],
+  );
+  const cargando = isLoading && data === undefined;
+  return {
+    datos: data ?? null,
+    error: error ? (error as Error).message : null,
+    cargando,
+    recargar,
+    setDatos,
+    actualizando: isValidating && data !== undefined,
+  };
 }
 
 export const CORTES = ["Inicio", "Mitad", "Final"];

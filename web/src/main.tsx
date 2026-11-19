@@ -1,6 +1,12 @@
 import React, { Suspense, createContext, lazy, useContext, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate } from "react-router-dom";
+import "@fontsource/fira-sans/400.css";
+import "@fontsource/fira-sans/600.css";
+import "@fontsource/fira-sans-condensed/400.css";
+import "@fontsource/montserrat/700.css";
+import "@fontsource/montserrat/800.css";
+import "@fontsource/ubuntu/700.css";
 import "./index.css";
 import { guardarSesion, leerSesion, Sesion } from "./api";
 import { Cargando } from "./componentes/ui";
