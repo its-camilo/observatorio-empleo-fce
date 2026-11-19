@@ -15,7 +15,10 @@ from observatorio import analisis
 from observatorio.api.seguridad import get_db, solo_admin, usuario_actual
 from observatorio.config import ajustes
 from observatorio.consultas import buscar_ofertas, listar_cursos, listar_temas_recomendados, oferta_resumen, valores_filtros
+from observatorio.filtro_ofertas import oferta_incluida_en_resultados
+from observatorio import agregados
 from observatorio.cache_respuesta import obtener_o_calcular
+from observatorio.http_cache import cabeceras_analisis, corte_considerado_cerrado
 from observatorio.db.modelos import Ejecucion, Oferta, Usuario, Validacion, ahora
 from observatorio.normas_corrida import normalizar_corte, normalizar_semestre
 
@@ -30,8 +33,13 @@ _HEADERS_ANALISIS = {"Cache-Control": "private, max-age=300"}
 _HEADERS_FILTROS = {"Cache-Control": "private, max-age=600"}
 
 
-def _json_cache(clave: str, ttl: float, calcular, headers: dict[str, str]):
-    return JSONResponse(obtener_o_calcular(clave, ttl, calcular), headers=headers)
+def _json_cache(clave: str, ttl: float, calcular, headers: dict[str, str], s: Session | None = None):
+    def _calc():
+        if s is not None:
+            return agregados.obtener_o_calcular(s, clave, calcular)
+        return calcular()
+
+    return JSONResponse(obtener_o_calcular(clave, ttl, _calc), headers=headers)
 
 
 def _corte(c: str | None) -> str | None:
@@ -144,6 +152,7 @@ def filtros(_: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
         _FILTROS_TTL,
         lambda: valores_filtros(s),
         _HEADERS_FILTROS,
+        s,
     )
 
 
@@ -163,6 +172,7 @@ def cortes(_: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
         _ANALISIS_TTL,
         lambda: analisis.cortes_disponibles(s),
         _HEADERS_ANALISIS,
+        s,
     )
 
 
@@ -170,7 +180,8 @@ def cortes(_: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
 def resumen(semestre: str, corte: str, _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
     cor = normalizar_corte(corte)
     clave = f"analisis:resumen:{semestre}:{cor}"
-    return _json_cache(clave, _ANALISIS_TTL, lambda: analisis.resumen_corte(s, semestre, cor), _HEADERS_ANALISIS)
+    headers = cabeceras_analisis(s, semestre, cor)
+    return _json_cache(clave, _ANALISIS_TTL, lambda: analisis.resumen_corte(s, semestre, cor), headers, s)
 
 
 @router.get("/analisis/ranking")
@@ -185,7 +196,8 @@ def ranking(semestre: str, corte: str, carrera: str | None = None, _: Usuario = 
             "grupos": analisis.ranking_por_grupo(s, semestre, cor, carrera),
         }
 
-    return _json_cache(clave, _ANALISIS_TTL, _calc, _HEADERS_ANALISIS)
+    headers = cabeceras_analisis(s, semestre, cor)
+    return _json_cache(clave, _ANALISIS_TTL, _calc, headers, s)
 
 
 @router.get("/analisis/ranking-habilidades")
@@ -196,7 +208,8 @@ def ranking_habilidades(semestre: str, corte: str, carrera: str | None = None, _
         clave,
         _ANALISIS_TTL,
         lambda: {"ranking": analisis.ranking_habilidades(s, semestre, cor, carrera)},
-        _HEADERS_ANALISIS,
+        cabeceras_analisis(s, semestre, cor),
+        s,
     )
 
 
@@ -208,7 +221,8 @@ def ranking_idiomas(semestre: str, corte: str, carrera: str | None = None, _: Us
         clave,
         _ANALISIS_TTL,
         lambda: {"ranking": analisis.ranking_idiomas(s, semestre, cor, carrera)},
-        _HEADERS_ANALISIS,
+        cabeceras_analisis(s, semestre, cor),
+        s,
     )
 
 
@@ -226,7 +240,8 @@ def ranking_tipo_oferta(
         clave,
         _ANALISIS_TTL,
         lambda: {"ranking": analisis.ranking_tipo_oferta(s, semestre, cor, carrera)},
-        _HEADERS_ANALISIS,
+        cabeceras_analisis(s, semestre, cor),
+        s,
     )
 
 
@@ -244,7 +259,8 @@ def ranking_sector(
         clave,
         _ANALISIS_TTL,
         lambda: {"ranking": analisis.ranking_sector(s, semestre, cor, carrera)},
-        _HEADERS_ANALISIS,
+        cabeceras_analisis(s, semestre, cor),
+        s,
     )
 
 
@@ -253,13 +269,20 @@ def comparar(semestre_a: str, corte_a: str, semestre_b: str, corte_b: str, carre
              _: Usuario = Depends(usuario_actual), s: Session = Depends(get_db)):
     ca, cb = normalizar_corte(corte_a), normalizar_corte(corte_b)
     clave = f"analisis:comparar:{semestre_a}:{ca}:{semestre_b}:{cb}:{carrera or ''}"
-    return _json_cache(clave, _ANALISIS_TTL, lambda: analisis.comparar(s, semestre_a, ca, semestre_b, cb, carrera), _HEADERS_ANALISIS)
+    headers = _HEADERS_ANALISIS
+    if corte_considerado_cerrado(s, semestre_a, ca) and corte_considerado_cerrado(s, semestre_b, cb):
+        headers = cabeceras_analisis(s, semestre_b, cb)
+    return _json_cache(clave, _ANALISIS_TTL, lambda: analisis.comparar(s, semestre_a, ca, semestre_b, cb, carrera), headers, s)
 
 
 def _armar_dashboard(s: Session, rol: str) -> dict:
     from observatorio.corridas import ejecucion_dict
 
-    cs = obtener_o_calcular("cortes_disponibles", _DASHBOARD_TTL, lambda: analisis.cortes_disponibles(s))
+    cs = obtener_o_calcular(
+        "cortes_disponibles",
+        _DASHBOARD_TTL,
+        lambda: agregados.obtener_o_calcular(s, "cortes_disponibles", lambda: analisis.cortes_disponibles(s)),
+    )
     ultimo = cs[-1] if cs else None
     ultimas = []
     if rol == "admin":
@@ -267,7 +290,11 @@ def _armar_dashboard(s: Session, rol: str) -> dict:
     total_hist = obtener_o_calcular(
         "total_historico_ofertas",
         _DASHBOARD_TTL,
-        lambda: s.scalar(select(func.count()).select_from(Oferta)) or 0,
+        lambda: agregados.obtener_o_calcular(
+            s,
+            "total_historico_ofertas",
+            lambda: s.scalar(select(func.count()).select_from(Oferta).where(oferta_incluida_en_resultados())) or 0,
+        ),
     )
     resumen = None
     if ultimo:
@@ -275,7 +302,11 @@ def _armar_dashboard(s: Session, rol: str) -> dict:
         resumen = obtener_o_calcular(
             clave,
             _DASHBOARD_TTL,
-            lambda: analisis.resumen_corte(s, ultimo["semestre"], ultimo["corte"], para_dashboard=True),
+            lambda: agregados.obtener_o_calcular(
+                s,
+                clave,
+                lambda: analisis.resumen_corte(s, ultimo["semestre"], ultimo["corte"], para_dashboard=True),
+            ),
         )
     return {
         "cortes": cs,

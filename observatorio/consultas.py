@@ -51,10 +51,24 @@ def oferta_resumen(o: Oferta, con_descripcion: bool = False, max_desc: int | Non
     return d
 
 
+def _solo_filtros_conteo_precalculado(filtros: dict) -> bool:
+    return not any(
+        filtros.get(k)
+        for k in ("fuente", "ciudad", "software", "tipo_oferta", "nivel", "modalidad", "texto")
+    )
+
+
 def buscar_ofertas(s: Session, pagina: int = 1, tamano: int = 25, con_descripcion: bool = False, max_desc: int | None = None,
                    **filtros) -> dict:
     q = filtrar_ofertas(select(Oferta), **filtros)
-    total = s.scalar(filtrar_ofertas(select(func.count()).select_from(Oferta), **filtros)) or 0
+    total: int | None = None
+    if _solo_filtros_conteo_precalculado(filtros):
+        # Import perezoso: agregados ya importa valores_filtros de este módulo.
+        from observatorio.agregados import conteo_ofertas_precalculado
+
+        total = conteo_ofertas_precalculado(s, filtros.get("semestre"), filtros.get("corte"), filtros.get("carrera"))
+    if total is None:
+        total = s.scalar(filtrar_ofertas(select(func.count()).select_from(Oferta), **filtros)) or 0
     pagina = max(1, pagina)
     filas = s.scalars(q.order_by(Oferta.fecha_publicacion.desc().nullslast(), Oferta.id_oferta).offset((pagina - 1) * tamano).limit(tamano))
     return {"total": total, "pagina": pagina, "tamano": tamano, "paginas": (total + tamano - 1) // tamano if tamano else 0,

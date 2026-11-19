@@ -66,6 +66,10 @@ jobs:
         run: |
           echo "=== Semilla ==="
           python -m observatorio.run semilla
+      - name: Refrescar agregados analíticos
+        run: |
+          echo "=== Agregados (dashboard, rankings, filtros) ==="
+          python -m observatorio.run refrescar-agregados
       - name: Backfill sector industrial (§9.1)
         if: inputs.backfill_sector
         run: |

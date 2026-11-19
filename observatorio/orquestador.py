@@ -728,6 +728,11 @@ def consolidar(s: Session, id_ejecucion: str, permitir_mini: bool = True) -> Eje
 
         proc.guardar_no_catalogados()
         aplicar_tras_consolidar(s, ejec, cfg)
+        from observatorio.agregados import refrescar_agregados_corte
+        from observatorio.cache_respuesta import invalidar_caches_analitica
+
+        invalidar_caches_analitica()
+        refrescar_agregados_corte(s, ejec.semestre, ejec.corte)
         finalizar(s, ejec, proc)
         cc = cfg.get("cursos") or {}
         if cc.get("activo", True):

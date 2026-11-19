@@ -27,7 +27,7 @@ import sys
 ACCIONES = (
     "completa", "preparar", "extraer", "extraer-fuente", "extraer-secuencial", "cursos", "consolidar", "reporte",
     "exportar", "migrar", "semilla", "purga-operativa", "purga-reglas", "cerrar-corrida", "cerrar-colgadas",
-    "ajustar-proporciones", "backfill-habilidades", "backfill-sector",
+    "ajustar-proporciones", "backfill-habilidades", "backfill-sector", "refrescar-agregados",
 )
 
 # Comandos de mantenimiento / export que no requieren id de ejecución de corrida.
@@ -38,6 +38,7 @@ ACCIONES_SIN_RUN_ID = frozenset({
     "cerrar-colgadas",
     "backfill-habilidades",
     "backfill-sector",
+    "refrescar-agregados",
 })
 
 
@@ -296,7 +297,23 @@ def main(argv: list[str] | None = None) -> int:
             cor = orq.normalizar_corte(a.corte) if a.corte else None
             print(json.dumps(backfill_sectores(s, sem, cor, a.limite, aplicar=a.aplicar), ensure_ascii=False))
             if a.aplicar:
+                from observatorio.agregados import refrescar_agregados_corte
+
+                if sem and cor:
+                    refrescar_agregados_corte(s, sem, cor)
                 s.commit()
+            return 0
+        if a.accion == "refrescar-agregados":
+            from observatorio.agregados import backfill_agregados_existentes, refrescar_agregados_corte
+
+            if a.semestre and a.corte:
+                sem = orq.normalizar_semestre(a.semestre)
+                cor = orq.normalizar_corte(a.corte)
+                out = [refrescar_agregados_corte(s, sem, cor)]
+            else:
+                out = backfill_agregados_existentes(s)
+            s.commit()
+            print(json.dumps(out, ensure_ascii=False))
             return 0
         if a.accion in ("purga-operativa", "purga-reglas"):
             from sqlalchemy import func, select

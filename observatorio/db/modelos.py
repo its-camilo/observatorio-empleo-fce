@@ -391,6 +391,27 @@ class LlmCache(Base):
     creado_en: Mapped[datetime] = mapped_column(DateTime, default=ahora)
 
 
+class AgregadoAnalisis(Base):
+    """Payload JSON precalculado (clave = la misma que usa la caché en memoria de la API)."""
+
+    __tablename__ = "agregados_analisis"
+
+    clave: Mapped[str] = mapped_column(String(256), primary_key=True)
+    payload: Mapped[dict] = mapped_column(JSON)
+    actualizado_en: Mapped[datetime] = mapped_column(DateTime, default=ahora, onupdate=ahora)
+
+
+class ConteoOfertasCorte(Base):
+    """Totales por corte (y carrera, incl. «Todas») para acelerar COUNT en listados."""
+
+    __tablename__ = "conteos_ofertas_corte"
+
+    semestre: Mapped[str] = mapped_column(String(16), primary_key=True)
+    corte: Mapped[str] = mapped_column(String(16), primary_key=True)
+    carrera: Mapped[str] = mapped_column(String(120), primary_key=True)
+    total: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class TokenMcp(Base):
     """Token personal de acceso de un administrador para las herramientas de
     administración del servidor MCP. Solo se guarda el hash SHA-256."""
